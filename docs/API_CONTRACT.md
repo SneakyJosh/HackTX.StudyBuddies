@@ -1,15 +1,30 @@
 # StudySync — Shared API Contract v1
 
-**Status:** Proposed freeze before parallel implementation. **Owner:** Cursor. Base path: `/api`. JSON over HTTPS. Next.js App Router route handlers. Supabase Auth sessions identify callers. Never trust a user ID sent in a request body.
+**Status:** Frozen for Milestone 0. **Owner:** Cursor. Base path: `/api`. JSON over HTTPS. Next.js App Router route handlers. Supabase Auth sessions identify callers. Never trust a user ID sent in a request body.
+
+Shared TypeScript types, bounds, reason strings, and demo seed ids live in `src/types/api.ts`. That module must stay identical to this document. Agents import it and do not declare a second contract.
 
 ## Conventions
 - Request body and response keys use `camelCase`.
-- Success response: `{ "data": ... }`; list response: `{ "data": [...], "meta": { "count": 0 } }`.
+- Success response: `{ "data": ... }`. List response: `{ "data": [...], "meta": { "count": 0 } }`.
 - Error response: `{ "error": { "code": "VALIDATION_ERROR", "message": "Human-readable message", "details": {} } }`.
-- Codes: `UNAUTHENTICATED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `VALIDATION_ERROR` (400), `RATE_LIMITED` (429), `INTERNAL_ERROR` (500).
-- All private endpoints require a valid Supabase session cookie. Route handlers derive `userId` from authenticated session. No service-role credential in browser.
-- ISO 8601 UTC timestamps. IDs are UUID strings. Nullable fields use `null`. Unknown fields should be rejected or ignored consistently by validation layer.
-- Campus locations are named predefined public places, never raw GPS coordinates.
+- All private endpoints require a valid Supabase session cookie. Route handlers derive `userId` from the authenticated session. No service-role credential in the browser.
+- ISO 8601 UTC timestamps. IDs are UUID strings. Nullable fields use `null`.
+- Unknown request fields are rejected with `400 VALIDATION_ERROR`. The validation layer does not ignore them.
+- Campus locations are named predefined public buildings. Responses never include GPS coordinates, room numbers, desks, or private schedules.
+
+## Error codes
+| Code | HTTP | When |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | Malformed JSON, unknown fields, wrong types, out-of-bounds values, bad enums, a course that is not on the caller profile, a location or course from another university, self-requests, self-blocks, or `q` / report text over the length limit |
+| `UNAUTHENTICATED` | 401 | Missing or invalid session |
+| `FORBIDDEN` | 403 | Profile not completed, visibility is off when checking in, recipient is not discoverable, or the caller is a participant but is not allowed to make that status change |
+| `NOT_FOUND` | 404 | Request, user, or other resource is missing. Also used when the caller is not a participant on a request, so the handler does not reveal that the row exists |
+| `CONFLICT` | 409 | Duplicate pending request in either direction, an accepted request already exists for the pair, an illegal status transition for the role that is allowed to act, or a university change while a check-in is active |
+| `RATE_LIMITED` | 429 | Reserved. MVP handlers may omit rate limits |
+| `INTERNAL_ERROR` | 500 | Unexpected server failure |
+
+`details` is an object. Field failures should name the field. `details` may be `{}`.
 
 ## Types
 ```ts
@@ -17,87 +32,182 @@ type StudyStyle = 'quiet' | 'collaborative' | 'flexible';
 type Availability = 'available' | 'questions_only' | 'focused';
 type RequestStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
 type AcademicYear = 'freshman' | 'sophomore' | 'junior' | 'senior' | 'graduate' | 'other';
+type ReportReason = 'harassment' | 'spam' | 'other';
+type RequestDirection = 'incoming' | 'outgoing' | 'all';
+type MatchReason = 'Studying the same course' | 'Shares another enrolled course' | 'Compatible study style' | 'Same study location' | 'Preferred duration within 30 minutes' | 'Preferred duration within 60 minutes' | 'Similar preferred group size';
+
+type University = { id: string; name: string; slug: string };
 type Profile = { id: string; displayName: string; universityId: string; major: string | null; academicYear: AcademicYear | null; courseIds: string[]; studyStyle: StudyStyle; preferredDurationMinutes: number; preferredGroupSize: number; visible: boolean };
 type Location = { id: string; universityId: string; name: string; buildingCode: string; description: string | null };
+type PublicLocation = Pick<Location, 'id' | 'name' | 'buildingCode'>;
 type Course = { id: string; universityId: string; code: string; title: string };
 type Checkin = { id: string; locationId: string; courseId: string; availability: Availability; studyStyle: StudyStyle; startedAt: string; expiresAt: string };
-type DiscoveryMatch = { user: Pick<Profile, 'id' | 'displayName' | 'major' | 'academicYear' | 'studyStyle'>; location: Location; course: Course; availability: Availability; compatibilityScore: number; reasons: string[]; checkinExpiresAt: string; requestStatus: RequestStatus | null };
-type StudyRequest = { id: string; senderId: string; recipientId: string; status: RequestStatus; createdAt: string; updatedAt: string };
+type DiscoveryUser = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
+type DiscoveryMatch = { user: DiscoveryUser; location: PublicLocation; course: Course; availability: Availability; compatibilityScore: number; reasons: MatchReason[]; checkinExpiresAt: string; requestStatus: RequestStatus | null };
+type RequestCounterpart = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
+type StudyRequest = { id: string; senderId: string; recipientId: string; status: RequestStatus; createdAt: string; updatedAt: string; counterpart: RequestCounterpart; course: Course | null; location: PublicLocation | null };
+type Block = { blockedUserId: string; displayName: string | null; createdAt: string };
 ```
+
+`DiscoveryUser.studyStyle` is the counterpart's **check-in** study style and is the value used for scoring. `RequestCounterpart.studyStyle` is the counterpart's **profile** study style so the Requests tab still has a label after checkout.
+
+`MatchReason` is exactly one of:
+- `Studying the same course`
+- `Shares another enrolled course`
+- `Compatible study style`
+- `Same study location`
+- `Preferred duration within 30 minutes`
+- `Preferred duration within 60 minutes`
+- `Similar preferred group size`
+
+## Validation bounds
+| Field | Rule |
+|---|---|
+| `displayName` | Required string, trimmed length 1–40 |
+| `major` | `null` or trimmed length 1–80 |
+| `academicYear` | Enum or `null` |
+| `courseIds` | 1–8 unique UUIDs belonging to the profile university. `PUT /api/profile` replaces the full set |
+| `preferredDurationMinutes` | Integer 30–180 |
+| `preferredGroupSize` | Integer 1–6 |
+| `visible` | Boolean. Omitted on create or update means `false` |
+| `durationMinutes` | Integer 30–180 |
+| `q` | Optional course search, trimmed length at most 40 |
+| `details` | Omitted, `null`, or string length at most 500 |
+
+Check-in `courseId` must be one of the caller's `courseIds`. Check-in `locationId` must belong to the profile university.
 
 ## Endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/api/locations` | yes | Predefined locations for user's university |
-| GET | `/api/courses` | yes | Courses for user's university; optional `q` filter |
+| GET | `/api/universities` | yes | Campuses the caller may join. Works before a profile exists |
+| GET | `/api/locations` | yes | Predefined locations for the caller's university |
+| GET | `/api/courses` | yes | Courses for the caller's university; optional `q` filter |
 | GET | `/api/profile` | yes | Current user's profile |
-| PUT | `/api/profile` | yes | Create/update current user's profile |
-| GET | `/api/checkin` | yes | Current active check-in or `null` |
-| POST | `/api/checkin` | yes | Create/replace current user's check-in |
-| DELETE | `/api/checkin` | yes | Check out current user |
+| PUT | `/api/profile` | yes | Create or replace the current user's profile |
+| GET | `/api/checkin` | yes | Current active check-in, or `null` |
+| POST | `/api/checkin` | yes | Create or replace the current user's check-in |
+| DELETE | `/api/checkin` | yes | Check out the current user |
 | GET | `/api/discovery` | yes | Discover same-campus active matches |
-| GET | `/api/requests` | yes | Current user's incoming/outgoing requests |
+| GET | `/api/requests` | yes | Current user's incoming and outgoing requests |
 | POST | `/api/requests` | yes | Send a request |
-| PATCH | `/api/requests/:id` | yes | Accept, decline or cancel a request |
+| PATCH | `/api/requests/:id` | yes | Accept, decline, or cancel a request |
+| GET | `/api/blocks` | yes | Users the caller has blocked |
 | POST | `/api/blocks` | yes | Block another user |
 | DELETE | `/api/blocks/:userId` | yes | Unblock a user |
 | POST | `/api/reports` | yes | Report a user |
 
-## Request/response examples
+There is no custom sign-in route. Email sign-up and sign-in use the Supabase Auth client. The API only reads the resulting session cookie.
+
+## Request and response details
+### GET `/api/universities`
+Auth required. A profile is not required. Response `{ "data": University[], "meta": { "count": number } }`. The Milestone 0 seed contains one campus, UT Austin. The client uses this id in `PUT /api/profile`.
+
 ### GET `/api/locations`
-```json
-{"data":[{"id":"11111111-1111-4111-8111-111111111111","universityId":"22222222-2222-4222-8222-222222222222","name":"Perry-Castañeda Library","buildingCode":"PCL","description":"Public library study spaces"}],"meta":{"count":1}}
-```
+Returns `{ "data": Location[], "meta": { "count": number } }`. When the caller has a profile, return that profile's university. When the profile is `null`, return the sole configured university. `description` is a short public building blurb and must not name a room, desk, or coordinate. Inactive locations are omitted.
 
 ### GET `/api/courses?q=M408`
-Returns `{ "data": Course[], "meta": { "count": number } }` with only courses from the caller's university.
+Returns `{ "data": Course[], "meta": { "count": number } }` for the same university selection rule as locations. `q` is an optional case-insensitive substring on `code` or `title`.
 
 ### GET `/api/profile`
-Returns `{ "data": Profile | null }`. Null indicates onboarding not completed.
+Returns `{ "data": Profile | null }`. `null` means onboarding is not complete.
 
 ### PUT `/api/profile`
-Body: `{ "displayName": "Alex", "universityId": "uuid", "major": "Engineering", "academicYear": "freshman", "courseIds": ["uuid"], "studyStyle": "collaborative", "preferredDurationMinutes": 120, "preferredGroupSize": 2, "visible": true }`.
-Response: `{ "data": Profile }`. University must be an allowed campus and course IDs must belong to it. Default `visible` is `false` unless user explicitly opts in.
+Body: `{ "displayName": "Demo Student A", "universityId": "22222222-2222-4222-8222-222222222222", "major": "Engineering", "academicYear": "freshman", "courseIds": ["33333333-3333-4333-8333-333333333331"], "studyStyle": "collaborative", "preferredDurationMinutes": 120, "preferredGroupSize": 2, "visible": true }`.
+
+Response: `{ "data": Profile }`. `universityId` must be an allowed campus. Every course id must belong to that campus. Omitted `visible` is stored as `false`. Changing `universityId` while the caller has an active check-in returns `409 CONFLICT`. The handler replaces `profile_courses` with `courseIds` in the same transaction.
 
 ### GET `/api/checkin`
-Returns `{ "data": Checkin | null }`. Expired check-ins are treated as null.
+Returns `{ "data": Checkin | null }`. A check-in is active only when `checked_out_at` is null and `expires_at` is greater than server time. Expired rows are returned as `null`.
 
 ### POST `/api/checkin`
 Body: `{ "locationId": "uuid", "courseId": "uuid", "durationMinutes": 120, "availability": "available", "studyStyle": "collaborative" }`.
-Validation: duration 30–180 minutes; course/location belong to profile university; user has completed profile and opted into visibility. Replaces any active check-in atomically. Response `201 { "data": Checkin }`.
+
+Requires a completed profile and `visible: true`. Otherwise `403 FORBIDDEN`. `courseId` must be one of the profile's `courseIds`. Duration is 30–180 minutes. The handler ends any active check-in and inserts the new row in one transaction. Response `201 { "data": Checkin }`.
+
+`availability: "focused"` is valid. Focused check-ins are stored and returned to the owner, and they are excluded from discovery.
+
+Setting `visible` to `false` later does not check the user out. That user drops out of discovery until they opt in again.
 
 ### DELETE `/api/checkin`
-Response `200 { "data": { "checkedOut": true } }` (idempotent).
+Response `200 { "data": { "checkedOut": true } }`. Idempotent when the caller is already checked out or expired.
 
 ### GET `/api/discovery?locationId=uuid&courseId=uuid`
-Both filters optional. Response `{ "data": DiscoveryMatch[], "meta": { "count": number } }`. Only current, visible, available (`available` or `questions_only`) same-university check-ins; exclude self and either-direction blocks. Do not reveal precise location, detailed schedules, email, or contact information.
+Both filters are optional. Response `{ "data": DiscoveryMatch[], "meta": { "count": number } }`.
+
+Include a student only when all of these hold:
+- Same university as the caller.
+- Profile `visible` is true.
+- Check-in is active.
+- Availability is `available` or `questions_only`.
+- Not the caller.
+- No block in either direction.
+
+`locationId` and `courseId` further restrict that set. The caller may call this endpoint without being checked in or visible.
+
+`requestStatus` is the latest `study_requests` row between the pair in either direction, or `null` when none exists.
+
+`location` is building-level only. Do not return email, auth ids beyond the profile id, GPS, schedules, the profile's preferred duration, or the profile's group size. Those last two affect the score and reasons only.
 
 ### GET `/api/requests?direction=incoming|outgoing|all`
-Default `all`. Response `{ "data": StudyRequest[], "meta": { "count": number } }`. Only requests involving caller. No private contact details included.
+Default `all`. Response `{ "data": StudyRequest[], "meta": { "count": number } }`. Only requests involving the caller. Omit any request whose other participant is blocked in either direction.
+
+`counterpart` is the other participant and includes `displayName`, `major`, `academicYear`, and profile `studyStyle`. `course` and `location` come from that person's current active check-in. They are `null` after checkout or expiry. They are not columns on `study_requests`. No email or other contact details.
 
 ### POST `/api/requests`
-Body: `{ "recipientId": "uuid" }`. Recipient must be discoverable, on same campus, not blocked, and not caller. Duplicate pending request => 409 `CONFLICT`. Response `201 { "data": StudyRequest }`.
+Body: `{ "recipientId": "uuid" }`. The recipient must currently be discoverable to the caller. Self-requests are `400`. A recipient who is hidden, focused, expired, checked out, on another campus, or blocked in either direction is `403`.
+
+A pending request already exists for the unordered pair: `409`. An accepted request already exists for the unordered pair: `409`. After `declined` or `cancelled`, a new pending request is allowed. Response `201 { "data": StudyRequest }`.
 
 ### PATCH `/api/requests/:id`
-Body: `{ "status": "accepted" | "declined" | "cancelled" }`. Only recipient may accept/decline a pending request; only sender may cancel a pending request. Invalid transitions => 409. Response `{ "data": StudyRequest }`.
+Body: `{ "status": "accepted" | "declined" | "cancelled" }`.
+
+- Recipient of a `pending` request may set `accepted` or `declined`.
+- Sender of a `pending` request may set `cancelled`.
+- The sender attempting to accept or decline is `403`. The recipient attempting to cancel is `403`.
+- Any other transition, including changes after the request is no longer `pending`, is `409`.
+- A caller who is not a participant receives `404`.
+
+Response `{ "data": StudyRequest }`.
+
+### GET `/api/blocks`
+Response `{ "data": Block[], "meta": { "count": number } }`. Only blocks created by the caller. `displayName` is the blocked user's profile name, or `null` when that profile does not exist. No email.
 
 ### POST `/api/blocks`
-Body `{ "blockedUserId": "uuid" }`. Response `201 { "data": { "blockedUserId": "uuid" } }`. Excludes both directions from discovery/requests. Users cannot block themselves.
+Body: `{ "blockedUserId": "uuid" }`. Self-blocks are `400`. The first block returns `201 { "data": Block }`. Blocking an already-blocked user is idempotent and returns `200 { "data": Block }` with the original `createdAt`.
+
+Blocking cancels every `pending` request between the two users in either direction (`status: "cancelled"`). Accepted, declined, and already cancelled rows stay stored. Discovery and `GET /api/requests` hide the blocked user in both directions.
 
 ### DELETE `/api/blocks/:userId`
-Response `{ "data": { "unblocked": true } }`.
+Response `200 { "data": { "unblocked": true } }`. Idempotent when no block exists. Unblock does not revive cancelled requests.
 
 ### POST `/api/reports`
-Body `{ "reportedUserId": "uuid", "reason": "harassment" | "spam" | "other", "details": "optional text" }`. Response `201 { "data": { "id": "uuid" } }`. Reports visible only to authorized moderators, not reported users.
+Body: `{ "reportedUserId": "uuid", "reason": "harassment" | "spam" | "other", "details": "optional text" }`. Response `201 { "data": { "id": "uuid" } }`. A report does not itself block or cancel requests. Ordinary users cannot read reports. Self-reports are `400`.
 
-## Matching v1 (deterministic)
-Score 0–100, sum of:
-- Same active course: 40 points; other shared enrolled course: 25; otherwise 0.
-- Same study style or either `flexible`: 20 points; otherwise 0.
-- Same location: 20 points; otherwise 0.
-- Preferred study duration difference <=30 min: 10 points; <=60 min: 5; otherwise 0.
-- Preferred group size difference <=1: 10 points; otherwise 0.
-Return score and explanations ONLY for conditions actually met. Sort descending score, then stable user ID. This is a compatibility heuristic, not a predictive probability.
+## Matching v1
+The displayed `compatibilityScore` is a deterministic integer from 0 through 100. It is a compatibility heuristic, not a probability. Compare the two active check-ins and the two profiles as follows. Award each row at most once:
+
+| Condition | Points | Reason |
+|---|---|---|
+| The two active check-in `courseId` values are equal | 40 | `Studying the same course` |
+| Otherwise, `profile.courseIds` still intersect | 25 | `Shares another enrolled course` |
+| Check-in `studyStyle` values are equal, or either value is `flexible` | 20 | `Compatible study style` |
+| Check-in `locationId` values are equal | 20 | `Same study location` |
+| Absolute difference of `preferredDurationMinutes` is 30 or less | 10 | `Preferred duration within 30 minutes` |
+| Otherwise that absolute difference is 60 or less | 5 | `Preferred duration within 60 minutes` |
+| Absolute difference of `preferredGroupSize` is 1 or less | 10 | `Similar preferred group size` |
+
+Study style points use the **check-in** study style. Duration and group-size points use the **profile** preferences. Return a reason only when that row awarded points. A score of 0 has `reasons: []`. Do not invent a filler explanation.
+
+Maximum is 40 + 20 + 20 + 10 + 10 = 100.
+
+## Sorting
+Sort is a total order. The displayed score does not change.
+
+1. `rank = compatibilityScore + (sameLocation ? 10 : 0)`, descending. `sameLocation` is true when the caller has an active check-in and the match `locationId` equals it. The extra 10 is ordering-only. It is not added to `compatibilityScore` and it is not a reason. When the caller is not checked in, every bonus is 0.
+2. When `rank` ties, same-location matches come first.
+3. Then `user.id` ascending as a UUID string.
+
+Because scores move in steps of 5, a same-location student outranks another student whose displayed score is 0, 5, or 10 points higher. A student whose displayed score is 15 or more points higher ranks above a same-location student. Location never lifts a weak match over a clearly stronger one.
 
 ## Database schema (PostgreSQL / Supabase)
 - `universities`: `id uuid pk`, `name text`, `slug text unique`.
@@ -106,17 +216,40 @@ Return score and explanations ONLY for conditions actually met. Sort descending 
 - `profiles`: `id uuid pk references auth.users(id)`, `university_id uuid fk`, `display_name text`, `major text nullable`, `academic_year text nullable`, `study_style text`, `preferred_duration_minutes integer`, `preferred_group_size integer`, `visible boolean default false`, `created_at timestamptz`, `updated_at timestamptz`.
 - `profile_courses`: `user_id uuid fk`, `course_id uuid fk`, primary key (`user_id`, `course_id`).
 - `checkins`: `id uuid pk`, `user_id uuid fk`, `location_id uuid fk`, `course_id uuid fk`, `availability text`, `study_style text`, `started_at timestamptz`, `expires_at timestamptz`, `checked_out_at timestamptz nullable`.
-- `study_requests`: `id uuid pk`, `sender_id uuid fk`, `recipient_id uuid fk`, `status text`, `created_at timestamptz`, `updated_at timestamptz`.
+- `study_requests`: `id uuid pk`, `sender_id uuid fk`, `recipient_id uuid fk`, `status text`, `created_at timestamptz`, `updated_at timestamptz`. No course or location columns. Request course and location are derived from the counterpart's active check-in.
 - `blocks`: `blocker_id uuid fk`, `blocked_id uuid fk`, `created_at timestamptz`, primary key (`blocker_id`, `blocked_id`).
-- `reports`: `id uuid pk`, `reporter_id uuid fk`, `reported_id uuid fk`, `reason text`, `details text`, `created_at timestamptz`.
+- `reports`: `id uuid pk`, `reporter_id uuid fk`, `reported_id uuid fk`, `reason text`, `details text nullable`, `created_at timestamptz`.
 
-**Constraints:** Enforce enumerated values and duration/group-size bounds; ensure one active check-in via transactional update or advisory lock, since time-dependent `now()` cannot safely be used in a partial-index predicate. Enforce one pending request per pair via partial unique index. Index checkins on (`location_id`, `expires_at`) and requests on participant IDs. Validate cross-university references server-side.
+**Constraints:** Check enumerated values in the database. Enforce display name length 1–40, major length 1–80 when present, preferred duration 30–180, group size 1–6, and report details length at most 500. The profile write path rejects course sets outside 1–8 and should make a ninth enrollment fail in the database as well. One active check-in means `checked_out_at is null` and `expires_at > now()`, enforced by a transaction or advisory lock. A partial index cannot use `now()` safely. Enforce one `pending` request and one `accepted` request per unordered pair with partial unique indexes on `least(sender_id, recipient_id), greatest(sender_id, recipient_id)`. Index check-ins on (`location_id`, `expires_at`) and requests on both participant ids. Validate cross-university references in the route handler.
 
-## RLS / privacy
-Enable RLS on every user-linked table. Profiles editable only by owner. Profile course links writable only by owner. Check-ins writable only by owner. Requests readable by sender/recipient and mutable only under allowed transitions. Blocks writable/readable only by blocker. Reports insertable by reporter, not readable by ordinary users. Discovery should be served via a secure server route that checks session and only selects safe public fields; never expose full check-in tables to other users. Use minimal privileges and test RLS with two separate user sessions.
+## RLS and privacy
+Enable RLS on every user-linked table. Profiles and profile course links are writable only by the owner. Check-ins are writable only by the owner. Requests are readable by the sender and recipient and mutable only through the allowed transitions. Blocks are readable and writable only by the blocker. Reports are insertable by the reporter and not readable by ordinary users.
 
-## Auth and operational details
-Use `@supabase/ssr` for Next.js cookie-based sessions; verify user server-side with Supabase Auth, not client-supplied IDs. Supabase publishable/anon key may be client-side; service-role key is secret and must never be exposed or committed. Configure deployment redirect URLs for authentication. For initial MVP use manual refresh or short polling rather than Realtime; add subscriptions only after core flow passes tests.
+Discovery is a server route that checks the session and selects the public fields in `DiscoveryMatch`. Do not expose the check-ins table, emails, or coordinates to other users. Location descriptions stay public building blurbs. Test RLS with two separate user sessions. Use the smallest privilege that still lets the route run. The service-role key stays server-only.
+
+## Demo seed
+These rows are public campus data, not student records. Use the same ids in migrations and fixtures.
+
+| Entity | Id | Label |
+|---|---|---|
+| University | `22222222-2222-4222-8222-222222222222` | University of Texas at Austin (`ut-austin`) |
+| Location | `11111111-1111-4111-8111-111111111111` | Perry-Castañeda Library (`PCL`) |
+| Location | `11111111-1111-4111-8111-111111111112` | Engineering Education and Research Center (`EER`) |
+| Location | `11111111-1111-4111-8111-111111111113` | Texas Union (`UNION`) |
+| Course | `33333333-3333-4333-8333-333333333331` | `M408C` Differential and Integral Calculus |
+| Course | `33333333-3333-4333-8333-333333333332` | `CS314` Data Structures |
+| Course | `33333333-3333-4333-8333-333333333333` | `BIO311C` Introductory Biology |
+
+Labeled demo accounts, created in Supabase with email confirmation disabled or preconfirmed:
+- Demo Student A, `demo-student-a@studysync.example`
+- Demo Student B, `demo-student-b@studysync.example`
+
+Auth user ids are assigned when the accounts are created. Passwords stay in the local environment and are never committed. Do not seed real student names, emails, or schedules.
+
+## Auth and operations
+Use `@supabase/ssr` for Next.js cookie sessions. Verify the user on the server with Supabase Auth. The publishable/anon key may be client-side. The service-role key is secret. Configure deployment redirect URLs before the demo. The first release uses manual refresh or short polling. Add Realtime only after the core flow passes tests.
+
+Supabase package versions are pinned when backend implementation starts. The contract freeze does not add runtime dependencies.
 
 ## Contract change procedure
-Cursor owns edits. Any agent requesting a change must specify affected endpoint/types, migration impact, UI impact and compatibility strategy. Freeze updated contract and sync it to both worktrees before dependent code changes.
+Cursor owns edits to this file and to `src/types/api.ts`. Any agent requesting a change must specify the affected endpoint or type, migration impact, UI impact, and compatibility strategy. Freeze the update and sync it to both worktrees before dependent code changes.
