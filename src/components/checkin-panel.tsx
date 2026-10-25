@@ -21,7 +21,7 @@ import {
   type Profile,
   type StudyStyle,
 } from "@/types/api";
-import { useHydratedDemo } from "@/components/demo-provider";
+import { useDemo } from "@/components/demo-provider";
 import {
   Button,
   EmptyBlock,
@@ -44,7 +44,7 @@ type CheckinDraft = {
 };
 
 export function CheckinPanel() {
-  const demo = useHydratedDemo();
+  const demo = useDemo();
   const formId = useId();
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
   const [loadError, setLoadError] = useState("Could not load check-in.");
@@ -60,7 +60,7 @@ export function CheckinPanel() {
   const [checkingOut, setCheckingOut] = useState(false);
 
   useEffect(() => {
-    if (!demo.hydrated || !demo.userId) return;
+    if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
       setPhase("loading");
@@ -111,9 +111,9 @@ export function CheckinPanel() {
     return () => {
       cancelled = true;
     };
-  }, [demo.hydrated, demo.userId, demo.revision, reloadKey]);
+  }, [demo.ready, demo.userId, demo.revision, reloadKey]);
 
-  if (!demo.hydrated || phase === "loading") return <LoadingBlock label="Loading check-in" />;
+  if (!demo.ready || phase === "loading") return <LoadingBlock label="Loading check-in" />;
   if (phase === "error") {
     return (
       <ErrorBlock title="Check-in unavailable" message={loadError} onRetry={() => setReloadKey((value) => value + 1)} />

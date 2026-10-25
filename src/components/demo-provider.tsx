@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { getBrowserSupabase, missingPublicSupabaseEnv } from "@/lib/browser-supabase";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { getBrowserSupabase } from "@/lib/browser-supabase";
 import { getSessionSnapshot, noteAuthenticatedUser, subscribeSession } from "@/lib/session";
 
 type DemoState = {
@@ -11,15 +11,21 @@ type DemoState = {
   revision: number;
 };
 
+/**
+ * The same object on the server and the browser's first render.
+ * Session details arrive in an effect, after hydration, so the markup matches.
+ */
+const initialState: DemoState = {
+  ready: false,
+  userId: null,
+  email: null,
+  revision: 0,
+};
+
 const DemoContext = createContext<DemoState | null>(null);
 
 export function DemoProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<DemoState>({
-    ready: missingPublicSupabaseEnv().length > 0,
-    userId: null,
-    email: null,
-    revision: 0,
-  });
+  const [state, setState] = useState<DemoState>(initialState);
 
   useEffect(() => {
     const publish = () => {
@@ -27,7 +33,10 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     };
     const unsubscribe = subscribeSession(publish);
     const supabase = getBrowserSupabase();
-    if (!supabase) return unsubscribe;
+    if (!supabase) {
+      publish();
+      return unsubscribe;
+    }
 
     let active = true;
     const revisionAtStart = getSessionSnapshot().revision;
@@ -60,15 +69,4 @@ export function useDemo(): DemoState {
     throw new Error("useDemo must be used within DemoProvider");
   }
   return value;
-}
-
-function subscribeToHydration(): () => void {
-  return () => {};
-}
-
-/** False during server render and hydration, then true in the browser. */
-export function useHydratedDemo(): DemoState & { hydrated: boolean } {
-  const demo = useDemo();
-  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
-  return { ...demo, hydrated };
 }

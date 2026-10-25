@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { missingPublicSupabaseEnv } from "@/lib/browser-supabase";
 import { signInWithPassword } from "@/lib/session";
 import { DEMO_UNIVERSITY } from "@/types/api";
-import { useHydratedDemo } from "@/components/demo-provider";
-import { BrandMark, Button, ErrorBlock, LinkButton, cx, fieldClass, inputClass } from "@/components/ui";
+import { BrandMark } from "@/components/brand-mark";
+import { useDemo } from "@/components/demo-provider";
+import { Button, ErrorBlock, LinkButton, cx, fieldClass, inputClass } from "@/components/ui";
 
 function signInProblem(email: string, password: string): string | null {
   const trimmed = email.trim();
@@ -17,7 +18,7 @@ function signInProblem(email: string, password: string): string | null {
 }
 
 export function SignInPanel() {
-  const demo = useHydratedDemo();
+  const demo = useDemo();
   const router = useRouter();
   const [view, setView] = useState<"welcome" | "sign-in">("welcome");
   const [email, setEmail] = useState("");
@@ -27,7 +28,7 @@ export function SignInPanel() {
   const [submitting, setSubmitting] = useState(false);
   const missingEnv = missingPublicSupabaseEnv();
 
-  if (!demo.hydrated || !demo.ready) {
+  if (!demo.ready) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-page px-5">
         <p role="status" className="font-display text-2xl font-extrabold">

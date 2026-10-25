@@ -5,8 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { getRequests, isApiError } from "@/lib/api-client";
 import { labelForEmail, signOut } from "@/lib/session";
-import { useHydratedDemo } from "@/components/demo-provider";
-import { BrandMark, LinkButton, cx } from "@/components/ui";
+import { BrandMark } from "@/components/brand-mark";
+import { useDemo } from "@/components/demo-provider";
+import { LinkButton, cx } from "@/components/ui";
 
 const TABS = [
   { href: "/discover", label: "Discover", icon: DiscoverIcon },
@@ -16,9 +17,9 @@ const TABS = [
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const demo = useHydratedDemo();
+  const demo = useDemo();
 
-  if (!demo.hydrated || !demo.ready || !demo.userId) {
+  if (!demo.ready || !demo.userId) {
     return (
       <div className="min-h-dvh bg-page">
         <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 py-6 lg:px-10">
@@ -27,7 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="font-display text-2xl font-extrabold">StudySync</p>
           </header>
           <div className="flex flex-1 items-center justify-center py-8">
-            {demo.hydrated && demo.ready ? (
+            {demo.ready ? (
               <main className="panel-shadow grid w-full max-w-xl gap-4 rounded-[28px] border border-line bg-background p-6 sm:p-8">
                 <h1 className="font-display text-3xl font-extrabold">Sign in required</h1>
                 <p className="text-[15px] leading-6 text-muted">

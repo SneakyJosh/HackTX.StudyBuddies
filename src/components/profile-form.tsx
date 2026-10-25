@@ -13,7 +13,7 @@ import {
   type StudyStyle,
   type University,
 } from "@/types/api";
-import { useHydratedDemo } from "@/components/demo-provider";
+import { useDemo } from "@/components/demo-provider";
 import {
   Button,
   EmptyBlock,
@@ -67,7 +67,7 @@ function formFromProfile(profile: Profile): ProfileFormState {
 }
 
 export function ProfileForm() {
-  const demo = useHydratedDemo();
+  const demo = useDemo();
   const formId = useId();
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
   const [loadError, setLoadError] = useState("Could not load the profile form.");
@@ -80,7 +80,7 @@ export function ProfileForm() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!demo.hydrated || !demo.userId) return;
+    if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
       setPhase("loading");
@@ -112,9 +112,9 @@ export function ProfileForm() {
     return () => {
       cancelled = true;
     };
-  }, [demo.hydrated, demo.userId, demo.email, reloadKey]);
+  }, [demo.ready, demo.userId, demo.email, reloadKey]);
 
-  if (!demo.hydrated || phase === "loading") return <LoadingBlock label="Loading profile" />;
+  if (!demo.ready || phase === "loading") return <LoadingBlock label="Loading profile" />;
   if (phase === "error") {
     return (
       <ErrorBlock title="Profile unavailable" message={loadError} onRetry={() => setReloadKey((value) => value + 1)} />

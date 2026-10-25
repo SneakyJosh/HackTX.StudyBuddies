@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getRequests, isApiError, patchRequest } from "@/lib/api-client";
 import { REQUEST_STATUS_LABELS, STUDY_STYLE_LABELS, formatPersonMeta } from "@/lib/labels";
 import type { RequestDirection, StudyRequest } from "@/types/api";
-import { useHydratedDemo } from "@/components/demo-provider";
+import { useDemo } from "@/components/demo-provider";
 import {
   Button,
   EmptyBlock,
@@ -21,7 +21,7 @@ const DIRECTIONS: { value: RequestDirection; label: string }[] = [
 ];
 
 export function RequestList() {
-  const demo = useHydratedDemo();
+  const demo = useDemo();
   const [direction, setDirection] = useState<RequestDirection>("all");
   const [requests, setRequests] = useState<StudyRequest[] | null>(null);
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
@@ -31,7 +31,7 @@ export function RequestList() {
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
 
   useEffect(() => {
-    if (!demo.hydrated || !demo.userId) return;
+    if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
       setPhase("loading");
@@ -49,7 +49,7 @@ export function RequestList() {
     return () => {
       cancelled = true;
     };
-  }, [demo.hydrated, demo.userId, demo.revision, direction, reloadKey]);
+  }, [demo.ready, demo.userId, demo.revision, direction, reloadKey]);
 
   async function update(id: string, status: "accepted" | "declined" | "cancelled") {
     setPendingId(id);

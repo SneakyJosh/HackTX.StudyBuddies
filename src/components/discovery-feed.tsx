@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getCourses, getDiscovery, getLocations, isApiError, postRequest } from "@/lib/api-client";
 import type { Course, DiscoveryMatch, Location } from "@/types/api";
-import { useHydratedDemo } from "@/components/demo-provider";
+import { useDemo } from "@/components/demo-provider";
 import { ProfileCard } from "@/components/profile-card";
 import {
   Button,
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui";
 
 export function DiscoveryFeed() {
-  const demo = useHydratedDemo();
+  const demo = useDemo();
   const [locations, setLocations] = useState<Location[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [locationId, setLocationId] = useState("");
@@ -30,7 +30,7 @@ export function DiscoveryFeed() {
   const [requestError, setRequestError] = useState<{ userId: string; message: string } | null>(null);
 
   useEffect(() => {
-    if (!demo.hydrated || !demo.userId) return;
+    if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
       const [locationResult, courseResult] = await Promise.all([getLocations(), getCourses()]);
@@ -41,10 +41,10 @@ export function DiscoveryFeed() {
     return () => {
       cancelled = true;
     };
-  }, [demo.hydrated, demo.userId]);
+  }, [demo.ready, demo.userId]);
 
   useEffect(() => {
-    if (!demo.hydrated || !demo.userId) return;
+    if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
       setPhase("loading");
@@ -66,7 +66,7 @@ export function DiscoveryFeed() {
     return () => {
       cancelled = true;
     };
-  }, [demo.hydrated, demo.userId, demo.revision, locationId, courseId, reloadKey]);
+  }, [demo.ready, demo.userId, demo.revision, locationId, courseId, reloadKey]);
 
   async function sendRequest(recipientId: string) {
     setSendingId(recipientId);
