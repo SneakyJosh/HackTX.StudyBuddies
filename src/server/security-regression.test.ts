@@ -103,3 +103,56 @@ test("privileged read paths carry the server-only build guard", () => {
     assert.match(source, /^import "server-only";/m, `${file} must import server-only first`);
   }
 });
+
+test("the dev auth test page is development-only and exposes no secrets", () => {
+  const page = readFileSync("src/app/dev-auth-test/page.tsx", "utf8");
+  const client = readFileSync("src/app/dev-auth-test/dev-auth-test-client.tsx", "utf8");
+  // The server page 404s in production; the interactive UI is client-only.
+  assert.match(page, /process\.env\.NODE_ENV === "production"/);
+  assert.match(page, /notFound\(\)/);
+  assert.match(client, /^"use client";/m);
+  // Standard browser sign-in flow through @supabase/ssr cookies, no
+  // service-role credential and no session/token handling that could leak.
+  assert.match(client, /createBrowserClient/);
+  assert.match(client, /signInWithPassword/);
+  assert.match(client, /signOut\(\)/);
+  for (const forbidden of [
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "service_role",
+    "access_token",
+    "refresh_token",
+    "getSession",
+    "document.cookie",
+  ]) {
+    assert.equal(client.includes(forbidden), false, `dev auth test must not touch ${forbidden}`);
+  }
+  // It exercises exactly the three catalog endpoints and shows statuses.
+  for (const endpoint of ["/api/universities", "/api/locations", "/api/courses"]) {
+    assert.equal(client.includes(endpoint), true, endpoint);
+  }
+  assert.match(client, /response\.status/);
+});
+
+test("the dev auth test page drives the full two-student workflow and negative checks", () => {
+  const client = readFileSync("src/app/dev-auth-test/dev-auth-test-client.tsx", "utf8");
+  // Every workflow route from the frozen contract is exercised.
+  for (const path of [
+    "/api/profile",
+    "/api/checkin",
+    "/api/discovery",
+    "/api/requests",
+    "/api/blocks",
+  ]) {
+    assert.equal(client.includes(path), true, path);
+  }
+  for (const action of ["accepted", "declined", "cancelled", "signInWithPassword", "signOut"]) {
+    assert.equal(client.includes(action), true, action);
+  }
+  // Negative checks assert the contract's expected failure statuses.
+  for (const expected of ["400", "403", "404", "409"]) {
+    assert.equal(client.includes(expected), true, `expected status ${expected}`);
+  }
+  // It must stay read-safe: no destructive verbs beyond the contract's own
+  // check-out / unblock / transitions, and no report creation is needed.
+  assert.equal(client.includes("/api/reports"), false);
+});
