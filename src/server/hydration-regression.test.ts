@@ -9,6 +9,10 @@ const shellScreens = [
   "src/components/checkin-panel.tsx",
   "src/components/request-list.tsx",
   "src/components/profile-form.tsx",
+  "src/components/home-dashboard.tsx",
+  "src/components/connect-board.tsx",
+  "src/components/sessions-board.tsx",
+  "src/components/focus-sheet.tsx",
 ];
 
 test("BrandMark is exported from its own module and imported by name", () => {

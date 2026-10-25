@@ -170,7 +170,7 @@ export function ProfileForm() {
     <div className="grid w-full gap-5">
       <PageHeader
         title="Profile"
-        description="Tell StudySync how you like to study. Visibility stays off until you opt in. Saving updates your account on this campus."
+        description="Name, campus, courses, study style, session length, group size, and discovery visibility. These are the fields StudySync stores."
       />
       <form
         className="grid items-start gap-5 xl:grid-cols-2"
@@ -191,7 +191,7 @@ export function ProfileForm() {
           </div>
         ) : null}
 
-        <div className="grid gap-5">
+        <div className="panel-shadow grid gap-5 rounded-[20px] border border-line bg-surface p-4 sm:p-5">
         <label className={fieldClass} htmlFor={`${formId}-name`}>
           Display name
           <input
@@ -282,21 +282,26 @@ export function ProfileForm() {
         </fieldset>
         </div>
 
-        <div className="grid content-start gap-5">
+        <div className="panel-shadow grid content-start gap-5 rounded-[20px] border border-line bg-surface p-4 sm:p-5">
         <fieldset className="grid gap-2">
-          <legend className="text-sm font-medium">Study style</legend>
+          <legend className="text-sm font-bold">Study style</legend>
+          <div className="flex flex-wrap gap-2">
           {STUDY_STYLES.map((style) => (
-            <label key={style} className="flex min-h-11 items-center gap-3 text-sm">
+            <label
+              key={style}
+              className="inline-flex min-h-11 items-center rounded-full bg-surface-muted px-3 text-sm font-bold has-[:checked]:bg-accent-fill has-[:checked]:text-accent-ink"
+            >
               <input
                 type="radio"
                 name={`${formId}-style`}
-                className="h-5 w-5"
+                className="sr-only"
                 checked={form.studyStyle === style}
                 onChange={() => setForm({ ...form, studyStyle: style })}
               />
               {STUDY_STYLE_LABELS[style]}
             </label>
           ))}
+          </div>
         </fieldset>
 
         <label className={fieldClass} htmlFor={`${formId}-duration`}>

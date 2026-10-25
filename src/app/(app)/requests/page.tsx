@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { RequestList } from "@/components/request-list";
-
-export const metadata: Metadata = {
-  title: "Requests",
-};
+import { redirect } from "next/navigation";
 
 export default function RequestsPage() {
-  return <RequestList />;
+  redirect("/connect");
 }

@@ -20,7 +20,7 @@ const DIRECTIONS: { value: RequestDirection; label: string }[] = [
   { value: "outgoing", label: "Outgoing" },
 ];
 
-export function RequestList() {
+export function RequestList({ embedded = false }: { embedded?: boolean }) {
   const demo = useDemo();
   const [direction, setDirection] = useState<RequestDirection>("all");
   const [requests, setRequests] = useState<StudyRequest[] | null>(null);
@@ -60,11 +60,20 @@ export function RequestList() {
   }
 
   return (
-    <div className="grid w-full gap-5">
+    <div id="study-requests" className="grid w-full gap-5">
+      {embedded ? (
+        <div>
+          <h2 className="font-display text-xl font-bold">Requests</h2>
+          <p className="mt-1 text-sm leading-6 text-muted">
+            Incoming and outgoing study requests. Accept, decline, or cancel from here.
+          </p>
+        </div>
+      ) : (
       <PageHeader
         title="Requests"
         description="Accept, decline, or cancel from here. A missing course or building means that student is checked out."
       />
+      )}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Request direction">
         {DIRECTIONS.map((option) => (
           <Button
@@ -92,7 +101,7 @@ export function RequestList() {
         />
       ) : null}
       {phase === "ready" && requests && requests.length > 0 ? (
-        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className={embedded ? "grid gap-4" : "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"}>
           {requests.map((request) => {
             const incoming = demo.userId === request.recipientId;
             const busy = pendingId === request.id;

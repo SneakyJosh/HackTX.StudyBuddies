@@ -1,0 +1,315 @@
+"use client";
+
+import { useEffect, useId, useState } from "react";
+import {
+  deleteCheckin,
+  getCheckin,
+  getCourses,
+  getLocations,
+  getProfile,
+  isApiError,
+  postCheckin,
+} from "@/lib/api-client";
+import { AVAILABILITY_LABELS, AVAILABILITIES, STUDY_STYLE_LABELS, STUDY_STYLES, formatTimestamp } from "@/lib/labels";
+import {
+  VALIDATION,
+  type Availability,
+  type Checkin,
+  type Course,
+  type Location,
+  type PostCheckinBody,
+  type Profile,
+  type StudyStyle,
+} from "@/types/api";
+import { useDemo } from "@/components/demo-provider";
+import { Button, ErrorBlock, FieldError, Sheet, errorLines, fieldClass, inputClass } from "@/components/ui";
+
+type Draft = {
+  courseId: string;
+  locationId: string;
+  durationMinutes: number;
+  availability: Availability;
+  studyStyle: StudyStyle;
+};
+
+export function FocusSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const demo = useDemo();
+  const formId = useId();
+  const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
+  const [loadError, setLoadError] = useState("Could not load check-in.");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [active, setActive] = useState<Checkin | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [messages, setMessages] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open || !demo.ready || !demo.userId) return;
+    let cancelled = false;
+    void (async () => {
+      setPhase("loading");
+      const [profileResult, courseResult, locationResult, checkinResult] = await Promise.all([
+        getProfile(),
+        getCourses(),
+        getLocations(),
+        getCheckin(),
+      ]);
+      if (cancelled) return;
+      const failure = [profileResult, courseResult, locationResult, checkinResult].find(isApiError);
+      if (failure && isApiError(failure)) {
+        setLoadError(failure.error.message);
+        setPhase("error");
+        return;
+      }
+      if (isApiError(profileResult) || isApiError(courseResult) || isApiError(locationResult) || isApiError(checkinResult)) {
+        return;
+      }
+      const nextProfile = profileResult.data;
+      const profileCourses = courseResult.data.filter((course) => nextProfile?.courseIds.includes(course.id));
+      setProfile(nextProfile);
+      setCourses(courseResult.data);
+      setLocations(locationResult.data);
+      setActive(checkinResult.data);
+      setDraft({
+        courseId: profileCourses[0]?.id ?? "",
+        locationId: locationResult.data[0]?.id ?? "",
+        durationMinutes: nextProfile?.preferredDurationMinutes ?? VALIDATION.durationMinutes.min,
+        availability: "available",
+        studyStyle: nextProfile?.studyStyle ?? "collaborative",
+      });
+      setPhase("ready");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, demo.ready, demo.userId, demo.revision]);
+
+  useEffect(() => {
+    if (!open || !active) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [open, active]);
+
+  const profileCourses = courses.filter((course) => profile?.courseIds.includes(course.id));
+  const activeCourse = courses.find((course) => course.id === active?.courseId);
+  const activeLocation = locations.find((location) => location.id === active?.locationId);
+  const remaining = active && now !== null ? Math.max(0, new Date(active.expiresAt).getTime() - now) : null;
+
+  async function submit() {
+    if (!draft) return;
+    setSaving(true);
+    setMessages([]);
+    const body: PostCheckinBody = {
+      locationId: draft.locationId,
+      courseId: draft.courseId,
+      durationMinutes: draft.durationMinutes,
+      availability: draft.availability,
+      studyStyle: draft.studyStyle,
+    };
+    const result = await postCheckin(body);
+    setSaving(false);
+    if (isApiError(result)) {
+      setMessages(errorLines(result));
+      return;
+    }
+    setActive(result.data);
+  }
+
+  async function checkout() {
+    setCheckingOut(true);
+    setMessages([]);
+    const result = await deleteCheckin();
+    setCheckingOut(false);
+    if (isApiError(result)) {
+      setMessages(errorLines(result));
+      return;
+    }
+    setActive(null);
+    onClose();
+  }
+
+  return (
+    <Sheet open={open} title={active ? "Studying" : "Start focusing"} onClose={onClose}>
+      {phase === "loading" ? <p role="status">Loading check-in</p> : null}
+      {phase === "error" ? <ErrorBlock title="Check-in unavailable" message={loadError} /> : null}
+      {phase === "ready" && !profile ? (
+        <p className="text-sm leading-6 text-muted">Save a profile before starting a check-in.</p>
+      ) : null}
+      {phase === "ready" && profile && !profile.visible ? (
+        <p className="rounded-[14px] bg-warning-soft px-4 py-3 text-sm leading-6 text-warning">
+          Turn on discovery visibility in your profile before checking in.
+        </p>
+      ) : null}
+      {phase === "ready" && profile && active ? (
+        <div className="grid justify-items-center gap-4 text-center">
+          <TimerRing remaining={remaining} startedAt={active.startedAt} expiresAt={active.expiresAt} />
+          <p className="font-display text-3xl font-extrabold tabular-nums">
+            {remaining === null ? formatTimestamp(active.expiresAt) : formatClock(remaining)}
+          </p>
+          <p className="text-sm leading-6">
+            {activeCourse ? `${activeCourse.code} · ${activeCourse.title}` : "Course"}
+          </p>
+          <p className="text-sm leading-6">{activeLocation?.name ?? "Building"}</p>
+          <p className="text-sm leading-6 text-muted">
+            {AVAILABILITY_LABELS[active.availability]} · {STUDY_STYLE_LABELS[active.studyStyle]} · until{" "}
+            {formatTimestamp(active.expiresAt)}
+          </p>
+          {active.availability === "focused" ? (
+            <p className="rounded-[14px] bg-warning-soft px-4 py-3 text-sm leading-6 text-warning">
+              Focus mode hides you from discovery. Other students cannot see this check-in.
+            </p>
+          ) : (
+            <p className="text-sm leading-6 text-muted">
+              You are visible at this public building. Focus mode is the choice that hides you.
+            </p>
+          )}
+          <FieldError messages={messages} />
+          <Button variant="danger" disabled={checkingOut} onClick={() => void checkout()}>
+            {checkingOut ? "Ending…" : "End session"}
+          </Button>
+        </div>
+      ) : null}
+      {phase === "ready" && profile && draft && !active ? (
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <label className={fieldClass} htmlFor={`${formId}-course`}>
+            Class
+            <select
+              id={`${formId}-course`}
+              className={inputClass}
+              value={draft.courseId}
+              onChange={(event) => setDraft({ ...draft, courseId: event.target.value })}
+            >
+              {profileCourses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.code} · {course.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={fieldClass} htmlFor={`${formId}-location`}>
+            Public building
+            <select
+              id={`${formId}-location`}
+              className={inputClass}
+              value={draft.locationId}
+              onChange={(event) => setDraft({ ...draft, locationId: event.target.value })}
+            >
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name} ({location.buildingCode})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={fieldClass} htmlFor={`${formId}-duration`}>
+            Length, {draft.durationMinutes} minutes
+            <input
+              id={`${formId}-duration`}
+              className="w-full accent-[var(--accent-fill)]"
+              type="range"
+              min={VALIDATION.durationMinutes.min}
+              max={VALIDATION.durationMinutes.max}
+              step={1}
+              value={draft.durationMinutes}
+              onChange={(event) => setDraft({ ...draft, durationMinutes: Number(event.target.value) })}
+            />
+            <span className="font-semibold text-muted">30 to 180 minutes. That is the range this campus accepts.</span>
+          </label>
+          <fieldset className="grid gap-2">
+            <legend className="text-[13px] font-bold">Who can see you</legend>
+            {AVAILABILITIES.map((availability) => (
+              <label key={availability} className="flex min-h-11 items-center gap-3 text-sm">
+                <input
+                  type="radio"
+                  name={`${formId}-availability`}
+                  className="h-5 w-5"
+                  checked={draft.availability === availability}
+                  onChange={() => setDraft({ ...draft, availability })}
+                />
+                {AVAILABILITY_LABELS[availability]}
+              </label>
+            ))}
+            <p className="text-sm leading-6 text-muted">
+              Available and Questions only stay in discovery. Focused hides this check-in from other students.
+            </p>
+          </fieldset>
+          <fieldset className="grid gap-2">
+            <legend className="text-[13px] font-bold">Check-in study style</legend>
+            <div className="flex flex-wrap gap-2">
+              {STUDY_STYLES.map((style) => (
+                <label
+                  key={style}
+                  className="inline-flex min-h-11 items-center rounded-full bg-surface-muted px-3 text-sm font-bold has-[:checked]:bg-accent-fill has-[:checked]:text-accent-ink"
+                >
+                  <input
+                    type="radio"
+                    name={`${formId}-style`}
+                    className="sr-only"
+                    checked={draft.studyStyle === style}
+                    onChange={() => setDraft({ ...draft, studyStyle: style })}
+                  />
+                  {STUDY_STYLE_LABELS[style]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <FieldError messages={messages} />
+          <Button type="submit" disabled={!profile.visible || profileCourses.length === 0 || saving}>
+            {saving ? "Starting…" : `Start ${draft.durationMinutes} min session`}
+          </Button>
+        </form>
+      ) : null}
+    </Sheet>
+  );
+}
+
+function TimerRing({
+  remaining,
+  startedAt,
+  expiresAt,
+}: {
+  remaining: number | null;
+  startedAt: string;
+  expiresAt: string;
+}) {
+  const start = new Date(startedAt).getTime();
+  const end = new Date(expiresAt).getTime();
+  const span = end - start;
+  const elapsed = remaining === null || span <= 0 ? 0 : Math.min(1, Math.max(0, 1 - remaining / span));
+  const circumference = 2 * Math.PI * 108;
+  return (
+    <svg width="220" height="220" viewBox="0 0 250 250" aria-hidden="true">
+      <circle cx="125" cy="125" r="108" fill="none" stroke="rgba(16,48,74,0.12)" strokeWidth="10" />
+      <circle
+        cx="125"
+        cy="125"
+        r="108"
+        fill="none"
+        stroke="#FF9A3D"
+        strokeWidth="10"
+        strokeLinecap="round"
+        strokeDasharray={`${elapsed * circumference} ${circumference}`}
+        transform="rotate(-90 125 125)"
+      />
+    </svg>
+  );
+}
+
+function formatClock(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}

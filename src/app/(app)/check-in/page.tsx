@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { CheckinPanel } from "@/components/checkin-panel";
-
-export const metadata: Metadata = {
-  title: "Check-in",
-};
+import { redirect } from "next/navigation";
 
 export default function CheckinPage() {
-  return <CheckinPanel />;
+  redirect("/sessions");
 }

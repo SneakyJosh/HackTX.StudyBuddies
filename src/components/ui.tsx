@@ -28,7 +28,15 @@ export function Button({
   return <button type={type} className={cx(controlClass, variants[variant], className)} {...props} />;
 }
 
-type AppHref = "/" | "/discover" | "/check-in" | "/requests" | "/profile";
+type AppHref =
+  | "/"
+  | "/home"
+  | "/connect"
+  | "/sessions"
+  | "/profile"
+  | "/discover"
+  | "/check-in"
+  | "/requests";
 
 export function LinkButton({
   href,
@@ -125,6 +133,45 @@ export function FieldError({ messages }: { messages: string[] }) {
           <li key={message}>{message}</li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+export function Sheet({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center lg:items-center lg:p-6">
+      <button type="button" className="absolute inset-0 bg-[rgba(5,5,20,0.55)]" aria-label="Close" onClick={onClose} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="sheet-panel relative max-h-[92%] w-full overflow-y-auto rounded-t-[28px] bg-background px-[18px] pt-3 pb-8 lg:max-w-xl lg:rounded-[28px] lg:px-6"
+      >
+        <div className="mx-auto mb-3 h-[5px] w-10 rounded-full bg-line lg:hidden" />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="font-display text-[1.35rem] font-extrabold">{title}</h2>
+          <button
+            type="button"
+            className="grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-lg font-bold"
+            onClick={onClose}
+          >
+            <span aria-hidden="true">×</span>
+            <span className="sr-only">Close</span>
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

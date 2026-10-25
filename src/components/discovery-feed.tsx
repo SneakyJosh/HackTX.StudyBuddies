@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getCourses, getDiscovery, getLocations, isApiError, postRequest } from "@/lib/api-client";
+import { AVAILABILITY_LABELS, STUDY_STYLE_LABELS, formatPersonMeta, formatTimestamp, initials } from "@/lib/labels";
 import type { Course, DiscoveryMatch, Location } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { ProfileCard } from "@/components/profile-card";
@@ -11,11 +12,12 @@ import {
   ErrorBlock,
   LoadingBlock,
   PageHeader,
+  Sheet,
   fieldClass,
   inputClass,
 } from "@/components/ui";
 
-export function DiscoveryFeed() {
+export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
   const demo = useDemo();
   const [locations, setLocations] = useState<Location[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -28,6 +30,7 @@ export function DiscoveryFeed() {
   const [reloadKey, setReloadKey] = useState(0);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<{ userId: string; message: string } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
@@ -79,14 +82,24 @@ export function DiscoveryFeed() {
   }
 
   const filtered = locationId !== "" || courseId !== "";
+  const selected = matches?.find((match) => match.user.id === selectedId) ?? null;
 
   return (
     <div className="grid w-full gap-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+      {embedded ? (
+        <div>
+          <h2 className="font-display text-xl font-bold">Students studying now</h2>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-muted">
+            The percentage is the server compatibility score. The list stays in the order the server returned.
+          </p>
+        </div>
+      ) : (
       <PageHeader
         title="Discover"
         description="Active students on your campus who opted in. The percentage is the compatibility score. Same-building order does not change that number. A score of 0 has no explanation chips."
       />
+      )}
       <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-[28rem] xl:shrink-0">
         <label className={fieldClass} htmlFor="discovery-building">
           Building
@@ -145,7 +158,7 @@ export function DiscoveryFeed() {
           <p className="text-sm text-muted">
             {count} {count === 1 ? "student" : "students"}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <div className={embedded ? "grid gap-4 sm:grid-cols-2" : "grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"}>
             {matches.map((match) => (
               <ProfileCard
                 key={match.user.id}
@@ -153,11 +166,22 @@ export function DiscoveryFeed() {
                 sending={sendingId === match.user.id}
                 error={requestError?.userId === match.user.id ? requestError.message : null}
                 onRequest={(recipientId) => void sendRequest(recipientId)}
+                onOpen={() => setSelectedId(match.user.id)}
               />
             ))}
           </div>
         </>
       ) : null}
+      <Sheet open={selected !== null} title="Student" onClose={() => setSelectedId(null)}>
+        {selected ? (
+          <StudentSheet
+            match={selected}
+            sending={sendingId === selected.user.id}
+            error={requestError?.userId === selected.user.id ? requestError.message : null}
+            onRequest={() => void sendRequest(selected.user.id)}
+          />
+        ) : null}
+      </Sheet>
       {filtered && phase === "ready" ? (
         <Button
           variant="ghost"
@@ -169,6 +193,70 @@ export function DiscoveryFeed() {
         >
           Clear filters
         </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function StudentSheet({
+  match,
+  sending,
+  error,
+  onRequest,
+}: {
+  match: DiscoveryMatch;
+  sending: boolean;
+  error: string | null;
+  onRequest: () => void;
+}) {
+  const { user, course, location, availability, compatibilityScore, reasons, requestStatus, checkinExpiresAt } = match;
+  return (
+    <div className="grid gap-4">
+      <div className="flex items-center gap-3">
+        <span className="grid h-14 w-14 place-items-center rounded-full bg-accent-fill text-lg font-extrabold text-accent-ink">
+          {initials(user.displayName)}
+        </span>
+        <div>
+          <p className="font-display text-2xl font-extrabold">{user.displayName}</p>
+          <p className="text-sm text-muted">{formatPersonMeta(user.major, user.academicYear)}</p>
+        </div>
+      </div>
+      <p className="font-display text-4xl font-extrabold text-accent" aria-label={`${compatibilityScore} percent compatibility`}>
+        {compatibilityScore}%
+      </p>
+      <p className="text-sm leading-6">
+        {course.code} · {course.title}
+      </p>
+      <p className="text-sm leading-6">
+        {location.name} ({location.buildingCode})
+      </p>
+      <p className="text-sm leading-6 text-muted">
+        {AVAILABILITY_LABELS[availability]} · {STUDY_STYLE_LABELS[user.studyStyle]} · until {formatTimestamp(checkinExpiresAt)}
+      </p>
+      {reasons.length > 0 ? (
+        <ul aria-label="Match reasons" className="flex flex-wrap gap-2">
+          {reasons.map((reason) => (
+            <li key={reason} className="rounded-full bg-surface-muted px-3 py-1 text-sm font-semibold">
+              {reason}
+            </li>
+          ))}
+        </ul>
+      ) : compatibilityScore === 0 ? (
+        <p className="text-sm text-muted">A score of 0 has no explanation.</p>
+      ) : null}
+      {requestStatus === "pending" ? (
+        <p className="text-sm font-semibold">A study request is already pending.</p>
+      ) : requestStatus === "accepted" ? (
+        <p className="text-sm font-semibold text-accent">Connected</p>
+      ) : (
+        <Button disabled={sending} onClick={onRequest}>
+          {sending ? "Sending…" : "Send request"}
+        </Button>
+      )}
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
       ) : null}
     </div>
   );

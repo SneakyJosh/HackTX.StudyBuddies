@@ -54,7 +54,7 @@ export function SignInPanel() {
       setError(message);
       return;
     }
-    router.push("/discover");
+    router.push("/home");
   }
 
   return (
@@ -72,9 +72,9 @@ export function SignInPanel() {
         </div>
         <ul className="grid max-w-xl grid-cols-3 gap-3">
           {[
-            ["Discover", "See students who are checked in."],
-            ["Check-in", "Share a building, not a precise spot."],
-            ["Requests", "Accept a partner when you both agree."],
+            ["Home", "Your courses and the check-in that is active now."],
+            ["Connect", "See students who opted in at a public building."],
+            ["Sessions", "Start a check-in, including Focus mode."],
           ].map(([title, body]) => (
             <li key={title} className="rounded-[20px] border border-line bg-surface px-4 py-4">
               <p className="font-display text-lg font-bold">{title}</p>
@@ -105,8 +105,8 @@ export function SignInPanel() {
                 {demo.userId ? (
                   <div className="rounded-[20px] border border-line bg-surface px-4 py-4 text-left">
                     <p className="text-sm text-muted">Signed in as {demo.email ?? "your account"}.</p>
-                    <LinkButton href="/discover" variant="secondary" className="mt-3 w-full">
-                      Continue to Discover
+                    <LinkButton href="/home" variant="secondary" className="mt-3 w-full">
+                      Continue to Home
                     </LinkButton>
                   </div>
                 ) : null}
@@ -192,8 +192,8 @@ export function SignInPanel() {
               {demo.userId ? (
                 <div className="mt-6">
                   <p className="mb-3 text-sm text-muted">Signed in as {demo.email ?? "your account"}.</p>
-                  <LinkButton href="/discover" variant="secondary" className="w-full">
-                    Continue to Discover
+                  <LinkButton href="/home" variant="secondary" className="w-full">
+                    Continue to Home
                   </LinkButton>
                 </div>
               ) : null}

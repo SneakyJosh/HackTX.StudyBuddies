@@ -1,10 +1,5 @@
-import type { Metadata } from "next";
-import { DiscoveryFeed } from "@/components/discovery-feed";
-
-export const metadata: Metadata = {
-  title: "Discover",
-};
+import { redirect } from "next/navigation";
 
 export default function DiscoverPage() {
-  return <DiscoveryFeed />;
+  redirect("/connect");
 }

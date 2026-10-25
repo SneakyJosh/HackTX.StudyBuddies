@@ -347,7 +347,7 @@ export function CheckinPanel() {
           <Button type="submit" disabled={!canSubmit || saving}>
             {saving ? "Checking in…" : "Check in"}
           </Button>
-          <LinkButton href="/discover" variant="secondary">
+          <LinkButton href="/connect" variant="secondary">
             See matches
           </LinkButton>
         </div>

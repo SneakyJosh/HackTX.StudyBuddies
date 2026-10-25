@@ -24,11 +24,13 @@ export function ProfileCard({
   sending,
   error,
   onRequest,
+  onOpen,
 }: {
   match: DiscoveryMatch;
   sending: boolean;
   error: string | null;
   onRequest: (recipientId: string) => void;
+  onOpen?: () => void;
 }) {
   const { user, course, location, availability, compatibilityScore, reasons, requestStatus } = match;
   return (
@@ -70,9 +72,14 @@ export function ProfileCard({
           ))}
         </ul>
       ) : null}
-      <div className="mt-4">
+      <div className="mt-4 flex flex-wrap gap-2">
+        {onOpen ? (
+          <Button variant="secondary" onClick={onOpen}>
+            View
+          </Button>
+        ) : null}
         {requestStatus === "pending" ? (
-          <LinkButton href="/requests" variant="secondary">
+          <LinkButton href="/connect" variant="secondary">
             View pending request
           </LinkButton>
         ) : requestStatus === "accepted" ? (

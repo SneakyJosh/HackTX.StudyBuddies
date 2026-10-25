@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { getRequests, isApiError } from "@/lib/api-client";
+import { getCheckin, getRequests, isApiError } from "@/lib/api-client";
+import { formatTimestamp } from "@/lib/labels";
 import { labelForEmail, signOut } from "@/lib/session";
 import { BrandMark } from "@/components/brand-mark";
 import { useDemo } from "@/components/demo-provider";
 import { LinkButton, cx } from "@/components/ui";
 
 const TABS = [
-  { href: "/discover", label: "Discover", icon: DiscoverIcon },
-  { href: "/check-in", label: "Check-in", icon: CheckinIcon },
-  { href: "/requests", label: "Requests", icon: RequestsIcon },
+  { href: "/home", label: "Home", icon: HomeIcon },
+  { href: "/connect", label: "Connect", icon: ConnectIcon },
+  { href: "/sessions", label: "Sessions", icon: SessionsIcon },
   { href: "/profile", label: "Profile", icon: ProfileIcon },
 ] as const;
 
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <main className="panel-shadow grid w-full max-w-xl gap-4 rounded-[28px] border border-line bg-background p-6 sm:p-8">
                 <h1 className="font-display text-3xl font-extrabold">Sign in required</h1>
                 <p className="text-[15px] leading-6 text-muted">
-                  Discover, check-in, requests, and profile stay private until you sign in.
+                  Home, Connect, Sessions, and Profile stay private until you sign in.
                 </p>
                 <LinkButton href="/" className="w-full sm:w-auto">
                   Sign in
@@ -69,6 +70,7 @@ function SignedInShell({
   const router = useRouter();
   const accountLabel = labelForEmail(email) ?? email ?? "Signed in";
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [studyingUntil, setStudyingUntil] = useState<string | null>(null);
   const currentTab = TABS.find((tab) => tab.href === pathname);
 
   useEffect(() => {
@@ -76,6 +78,17 @@ function SignedInShell({
     void getRequests("all").then((result) => {
       if (cancelled || isApiError(result)) return;
       setPendingCount(result.data.filter((request) => request.status === "pending").length);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, revision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getCheckin().then((result) => {
+      if (cancelled || isApiError(result)) return;
+      setStudyingUntil(result.data ? formatTimestamp(result.data.expiresAt) : null);
     });
     return () => {
       cancelled = true;
@@ -106,7 +119,7 @@ function SignedInShell({
                     label={tab.label}
                     icon={tab.icon}
                     current={pathname === tab.href}
-                    pendingCount={tab.href === "/requests" ? pendingCount : null}
+                    pendingCount={tab.href === "/connect" ? pendingCount : null}
                     layout="sidebar"
                   />
                 </li>
@@ -137,6 +150,15 @@ function SignedInShell({
               </button>
             </div>
           </header>
+          {studyingUntil ? (
+            <Link
+              href="/sessions"
+              className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-full bg-foreground px-4 py-2 text-sm font-bold text-background lg:mx-8"
+            >
+              <span>Studying</span>
+              <span>until {studyingUntil}</span>
+            </Link>
+          ) : null}
           <div className="flex-1 px-[18px] pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">
             <div className="mx-auto w-full max-w-[1180px] xl:max-w-none">{children}</div>
           </div>
@@ -155,7 +177,7 @@ function SignedInShell({
                 label={tab.label}
                 icon={tab.icon}
                 current={pathname === tab.href}
-                pendingCount={tab.href === "/requests" ? pendingCount : null}
+                pendingCount={tab.href === "/connect" ? pendingCount : null}
                 layout="tabs"
               />
             </li>
@@ -208,7 +230,20 @@ function NavLink({
   );
 }
 
-function DiscoverIcon() {
+function HomeIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4.5 11.2 12 5l7.5 6.2V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-5.2H10.2v5.2H6A1.5 1.5 0 0 1 4.5 19v-7.8Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ConnectIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
@@ -224,16 +259,7 @@ function DiscoverIcon() {
   );
 }
 
-function CheckinIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="7.2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M12 8.5V12l2.6 1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function RequestsIcon() {
+function SessionsIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="4" y="5" width="16" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
