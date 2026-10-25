@@ -7,6 +7,7 @@ import { AVAILABILITY_LABELS, formatTimestamp, initials } from "@/lib/labels";
 import type { Checkin, Course, Location, Profile, ScheduledSession } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { FocusSheet } from "@/components/focus-sheet";
+import { StudyStatsCard } from "@/components/study-stats-card";
 import { Button, EmptyBlock, ErrorBlock, LinkButton, LoadingBlock, cardClass } from "@/components/ui";
 
 export function HomeDashboard() {
@@ -98,9 +99,9 @@ export function HomeDashboard() {
             </p>
           </div>
         </div>
-        <p className="mt-4 text-sm leading-6 text-muted">
-          Streaks and study hours stay empty until session history is saved. Nothing here is estimated.
-        </p>
+        <div className="mt-4">
+          <StudyStatsCard />
+        </div>
       </section>
 
       <section>

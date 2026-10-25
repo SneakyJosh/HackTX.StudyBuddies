@@ -20,9 +20,12 @@ import type {
   PatchSessionParticipantBody,
   PostInvitationBody,
   PostSessionBody,
+  PostStudyRatingBody,
   ScheduledSession,
   SessionWhen,
+  StudyRecord,
   StudyRequest,
+  StudyStats,
   University,
 } from "@/types/api";
 
@@ -149,8 +152,18 @@ export async function postRequest(body: PostRequestBody): Promise<ApiData<StudyR
   return publishWrite(await request<ApiData<StudyRequest>>("/api/requests", { method: "POST", body }));
 }
 
-export async function getSessions(when: SessionWhen = "upcoming"): Promise<ApiList<ScheduledSession> | ApiError> {
+export async function getSessions(
+  when: Exclude<SessionWhen, "history" | "missed"> = "upcoming",
+): Promise<ApiList<ScheduledSession> | ApiError> {
   return request<ApiList<ScheduledSession>>(`/api/sessions?when=${when}`);
+}
+
+export async function getStudyRecords(when: "history" | "missed"): Promise<ApiList<StudyRecord> | ApiError> {
+  return request<ApiList<StudyRecord>>(`/api/sessions?when=${when}`);
+}
+
+export async function getStudyStats(): Promise<ApiData<StudyStats> | ApiError> {
+  return request<ApiData<StudyStats>>("/api/study-stats");
 }
 
 export async function getOpenSessions(filters: { courseId?: string; today?: boolean } = {}): Promise<ApiList<OpenSession> | ApiError> {
@@ -211,6 +224,30 @@ export async function patchSessionParticipant(
 export async function postLeave(sessionId: string): Promise<ApiData<ScheduledSession> | ApiError> {
   return publishWrite(
     await request<ApiData<ScheduledSession>>(`/api/sessions/${encodeURIComponent(sessionId)}/leave`, { method: "POST" }),
+  );
+}
+
+export async function postFinish(sessionId: string): Promise<ApiData<StudyRecord> | ApiError> {
+  return publishWrite(
+    await request<ApiData<StudyRecord>>(`/api/sessions/${encodeURIComponent(sessionId)}/finish`, { method: "POST" }),
+  );
+}
+
+export async function postMiss(sessionId: string): Promise<ApiData<StudyRecord> | ApiError> {
+  return publishWrite(
+    await request<ApiData<StudyRecord>>(`/api/sessions/${encodeURIComponent(sessionId)}/miss`, { method: "POST" }),
+  );
+}
+
+export async function postStudyRating(
+  sessionId: string,
+  body: PostStudyRatingBody,
+): Promise<ApiData<StudyRecord> | ApiError> {
+  return publishWrite(
+    await request<ApiData<StudyRecord>>(`/api/sessions/${encodeURIComponent(sessionId)}/ratings`, {
+      method: "POST",
+      body,
+    }),
   );
 }
 

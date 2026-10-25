@@ -10,13 +10,16 @@ import {
   patchInvitation,
   patchSessionParticipant,
   postCancelSession,
+  postFinish,
   postLeave,
+  postMiss,
 } from "@/lib/api-client";
 import { formatCampusTimestamp } from "@/lib/campus-time";
 import { AVAILABILITY_LABELS, STUDY_STYLE_LABELS, formatTimestamp } from "@/lib/labels";
-import { VALIDATION, type Checkin, type Course, type Location, type ScheduledSession } from "@/types/api";
+import { VALIDATION, type Checkin, type Course, type Location, type ScheduledSession, type StudyRecord } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { FocusSheet } from "@/components/focus-sheet";
+import { RatingSheet, SessionHistory } from "@/components/session-history";
 import { ScheduleSheet } from "@/components/schedule-sheet";
 import { Button, EmptyBlock, ErrorBlock, LoadingBlock, cardClass } from "@/components/ui";
 
@@ -35,6 +38,8 @@ export function SessionsBoard() {
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [preset, setPreset] = useState<{ courseId: string; locationId: string; durationMinutes: number } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [asOf, setAsOf] = useState<number | null>(null);
+  const [rating, setRating] = useState<StudyRecord | null>(null);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
@@ -72,6 +77,7 @@ export function SessionsBoard() {
         setPast(pastResult.data);
         setScheduleMessage(null);
       }
+      setAsOf(Date.now());
       setPhase("ready");
     })();
     return () => {
@@ -142,7 +148,14 @@ export function SessionsBoard() {
         ) : (
           <ul className="grid gap-4 xl:grid-cols-2">
             {upcoming.map((session) => (
-              <SessionCard key={session.id} session={session} onStudy={() => studyFrom(session)} onError={setActionError} />
+              <SessionCard
+                key={session.id}
+                session={session}
+                asOf={asOf}
+                onStudy={() => studyFrom(session)}
+                onError={setActionError}
+                onFinished={setRating}
+              />
             ))}
           </ul>
         )}
@@ -154,12 +167,12 @@ export function SessionsBoard() {
       </section>
 
       <section className="grid gap-3">
-        <h2 className="font-display text-xl font-bold">Past bookings</h2>
+        <h2 className="font-display text-xl font-bold">Unconfirmed</h2>
         <p className="text-sm leading-6 text-muted">
-          These times have passed. They are not completed study sessions, and they do not add streaks or study hours.
+          These bookings ended without a recorded finish. They stay unconfirmed, so they add no self-reported hours and no streak. Mark one missed, or finish it within two hours after the end.
         </p>
         {past.length === 0 ? (
-          <EmptyBlock title="No past bookings" body="A booking moves here after its end time. Cancelling one removes it from both lists." />
+          <EmptyBlock title="No unconfirmed bookings" body="A booking moves here after its end time until you finish it or mark it missed." />
         ) : (
           <ul className="grid gap-4 xl:grid-cols-2">
             {past.map((session) => (
@@ -167,26 +180,40 @@ export function SessionsBoard() {
                 <h3 className="font-display text-xl font-bold">{session.title}</h3>
                 <p className="mt-1 text-sm text-muted">{formatCampusTimestamp(session.startsAt)}</p>
                 <p className="mt-1 text-sm">{session.location.name}</p>
-                <p className="mt-2 text-sm font-semibold">Ended booking</p>
+                <p className="mt-2 text-sm font-semibold">Unconfirmed</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <AttendanceActions
+                    session={session}
+                    asOf={asOf}
+                    onError={setActionError}
+                    onFinished={setRating}
+                  />
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
+      <SessionHistory />
       <ScheduleSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} />
       <FocusSheet open={focusOpen} preset={preset} onClose={() => setFocusOpen(false)} />
+      <RatingSheet record={rating} onClose={() => setRating(null)} />
     </div>
   );
 }
 
 function SessionCard({
   session,
+  asOf,
   onStudy,
   onError,
+  onFinished,
 }: {
   session: ScheduledSession;
+  asOf: number | null;
   onStudy: () => void;
   onError: (message: string | null) => void;
+  onFinished: (record: StudyRecord) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const requests = session.myRole === "host" ? session.participants.filter((person) => person.status === "requested") : [];
@@ -241,6 +268,7 @@ function SessionCard({
             Start check-in
           </Button>
         ) : null}
+        <AttendanceActions session={session} asOf={asOf} busy={busy} onError={onError} onFinished={onFinished} />
       </div>
       {requests.length > 0 ? (
         <ul className="mt-3 grid gap-2">
@@ -264,5 +292,52 @@ function SessionCard({
         </ul>
       ) : null}
     </li>
+  );
+}
+
+const FINISH_GRACE_MS = 2 * 60 * 60 * 1000;
+
+function AttendanceActions({
+  session,
+  asOf,
+  busy = false,
+  onError,
+  onFinished,
+}: {
+  session: ScheduledSession;
+  asOf: number | null;
+  busy?: boolean;
+  onError: (message: string | null) => void;
+  onFinished: (record: StudyRecord) => void;
+}) {
+  const [localBusy, setLocalBusy] = useState(false);
+  const eligible = session.myRole === "host" || session.myStatus === "accepted";
+  const started = asOf !== null && asOf >= new Date(session.startsAt).getTime();
+  const withinGrace = asOf !== null && asOf <= new Date(session.endsAt).getTime() + FINISH_GRACE_MS;
+  if (!eligible || !started) return null;
+
+  async function run(action: "finish" | "miss") {
+    setLocalBusy(true);
+    onError(null);
+    const result = action === "finish" ? await postFinish(session.id) : await postMiss(session.id);
+    setLocalBusy(false);
+    if (isApiError(result)) {
+      onError(result.error.message);
+      return;
+    }
+    if (action === "finish") onFinished(result.data);
+  }
+
+  return (
+    <>
+      {withinGrace ? (
+        <Button disabled={busy || localBusy} onClick={() => void run("finish")}>
+          Finish
+        </Button>
+      ) : null}
+      <Button variant="secondary" disabled={busy || localBusy} onClick={() => void run("miss")}>
+        Mark missed
+      </Button>
+    </>
   );
 }

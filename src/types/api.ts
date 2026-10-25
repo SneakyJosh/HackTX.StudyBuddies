@@ -98,7 +98,9 @@ export type SessionParticipantStatus =
   | "left"
   | "cancelled";
 export type SessionRole = "host" | "invitee" | "joiner";
-export type SessionWhen = "upcoming" | "past";
+export type SessionWhen = "upcoming" | "past" | "history" | "missed";
+export type SessionAttendance = "completed" | "missed";
+export type RatingCategory = "study_time" | "environment" | "chemistry";
 
 export type University = {
   id: string;
@@ -297,6 +299,60 @@ export type PostInvitationBody = { inviteeId: string };
 export type PatchInvitationBody = { status: "accepted" | "declined" };
 
 export type PatchSessionParticipantBody = { status: "accepted" | "declined" };
+
+/**
+ * One caller's record of a booking. Hours are self-reported, not verified,
+ * and they are not a match input.
+ */
+export type StudyRecord = {
+  id: string;
+  title: string;
+  course: Course;
+  location: PublicLocation;
+  startsAt: string;
+  endsAt: string;
+  sessionStatus: SessionStatus;
+  attendance: SessionAttendance;
+  /** Minutes this caller claimed. Zero when missed. */
+  creditedMinutes: number;
+  countsTowardStats: boolean;
+  /** America/Chicago date of the booking start, `YYYY-MM-DD`. */
+  campusDate: string;
+  recordedAt: string;
+  selfReported: true;
+  participants: SessionPerson[];
+  myRatings: {
+    studyTime: number | null;
+    environment: number | null;
+    chemistry: { userId: string; stars: number }[];
+  };
+};
+
+export type StudyCourseStreak = {
+  courseId: string;
+  code: string;
+  title: string;
+  streakDays: number;
+};
+
+export type StudyDayMinutes = { date: string; minutes: number };
+
+/** Totals from qualifying self-reported completions. Never a public ranking. */
+export type StudyStats = {
+  selfReported: true;
+  description: string;
+  streakDays: number;
+  qualifyingMinutes: number;
+  weekMinutes: number;
+  week: StudyDayMinutes[];
+  courseStreaks: StudyCourseStreak[];
+};
+
+export type PostStudyRatingBody = {
+  studyTime?: number;
+  environment?: number;
+  chemistry?: { userId: string; stars: number }[];
+};
 
 export type PostReportBody = {
   reportedUserId: string;

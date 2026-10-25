@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseOpenSession, parseScheduledSession } from "./session-payload.ts";
+import { parseOpenSession, parseScheduledSession, parseStudyRecord, parseStudyStats } from "./session-payload.ts";
 
 const person = {
   id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -78,4 +78,51 @@ test("an open card cannot carry a roster or an email", () => {
   assert.equal("participants" in parsed, false);
   assert.throws(() => parseOpenSession({ ...open, participants: [] }));
   assert.throws(() => parseOpenSession({ ...open, email: "hidden@example.com" }));
+});
+
+const record = {
+  id: session.id,
+  title: session.title,
+  course: session.course,
+  location: session.location,
+  startsAt: session.startsAt,
+  endsAt: session.endsAt,
+  sessionStatus: "scheduled",
+  attendance: "completed",
+  creditedMinutes: 60,
+  countsTowardStats: true,
+  campusDate: "2026-07-15",
+  recordedAt: "2026-07-15T21:00:00.000Z",
+  selfReported: true,
+  participants: [person],
+  myRatings: { studyTime: null, environment: 4, chemistry: [{ userId: person.id, stars: 5 }] },
+};
+
+test("a study record keeps hours self-reported and rejects a forged miss", () => {
+  const parsed = parseStudyRecord(record);
+  assert.equal(parsed.selfReported, true);
+  assert.equal(parsed.countsTowardStats, true);
+  assert.equal(parsed.myRatings.environment, 4);
+  assert.throws(() => parseStudyRecord({ ...record, selfReported: false }));
+  assert.throws(() => parseStudyRecord({ ...record, attendance: "missed", creditedMinutes: 30, countsTowardStats: true }));
+  assert.throws(() => parseStudyRecord({ ...record, creditedMinutes: 10, countsTowardStats: true }));
+});
+
+test("study stats require seven campus days and a self-reported flag", () => {
+  const stats = parseStudyStats({
+    selfReported: true,
+    description: "Self-reported study time. Not independently verified, and not used for matching.",
+    streakDays: 0,
+    qualifyingMinutes: 0,
+    weekMinutes: 0,
+    week: ["2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19"].map((date) => ({
+      date,
+      minutes: 0,
+    })),
+    courseStreaks: [],
+  });
+  assert.equal(stats.week.length, 7);
+  assert.equal(stats.streakDays, 0);
+  assert.throws(() => parseStudyStats({ ...stats, selfReported: false }));
+  assert.throws(() => parseStudyStats({ ...stats, week: stats.week.slice(0, 6) }));
 });

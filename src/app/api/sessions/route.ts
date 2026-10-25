@@ -2,13 +2,15 @@ import type { NextRequest } from "next/server";
 
 import { requireAuthenticatedUser } from "@/server/auth";
 import { dataResponse, handleApi, listResponse } from "@/server/errors";
-import { createSession, listMySessions } from "@/server/sessions";
+import { createSession, listMySessions, listStudyRecords } from "@/server/sessions";
 import { assertNoSearchParams, parsePostSessionBody, parseSessionWhen, readJsonObject } from "@/server/validation";
 
 export async function GET(request: NextRequest) {
   return handleApi(async () => {
     const { supabase } = await requireAuthenticatedUser();
     const when = parseSessionWhen(request.nextUrl.searchParams);
+    if (when === "history") return listResponse(await listStudyRecords(supabase, "completed"), supabase);
+    if (when === "missed") return listResponse(await listStudyRecords(supabase, "missed"), supabase);
     return listResponse(await listMySessions(supabase, when), supabase);
   });
 }

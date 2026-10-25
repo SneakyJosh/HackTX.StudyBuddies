@@ -228,3 +228,31 @@ test("create_study_session does not shadow commitment columns", () => {
   assert.match(applied, /function public\.create_study_session/);
   assert.match(applied, /tstzrange\(starts_at, ends_at, '\[\)'\)/);
 });
+
+test("study history is self-reported, private, and does not change matching", () => {
+  const history = readFileSync("supabase/migrations/0005_study_history.sql", "utf8");
+  const earlier = ["0001_studysync.sql", "0002_fix_pair_lock_least_greatest.sql", "0003_study_sessions.sql", "0004_fix_create_session_column_ambiguity.sql"];
+  for (const file of earlier) {
+    assert.equal(readFileSync(`supabase/migrations/${file}`, "utf8").includes("study_session_attendance"), false, file);
+  }
+  assert.match(history, /outcome in \('completed', 'missed'\)/);
+  assert.match(history, /counts_toward_stats = \(outcome = 'completed' and credited_minutes >= 30\)/);
+  assert.match(history, /if caller_status is distinct from 'accepted'/);
+  assert.match(history, /if s\.status <> 'scheduled'/);
+  assert.match(history, /interval '2 hours'/);
+  assert.match(history, /not exists \(\s*select 1 from public\.study_session_attendance a/);
+  assert.equal(history.includes("update public.study_session_attendance"), false);
+  assert.equal(history.includes("discovery_candidates"), false);
+  assert.equal(/drop table/i.test(history), false);
+  assert.match(history, /using \(user_id = auth\.uid\(\)\)/);
+  assert.match(history, /using \(rater_id = auth\.uid\(\)\)/);
+  assert.match(history, /where category = 'chemistry'/);
+  assert.match(history, /'Self-reported study time/);
+  assert.equal(history.includes("grant insert"), false);
+  assert.equal(history.includes("grant update"), false);
+  assert.equal(history.includes("grant delete"), false);
+  const matching = readFileSync("src/server/matching.ts", "utf8");
+  assert.equal(matching.includes("rating"), false);
+  assert.equal(matching.includes("streak"), false);
+  assert.equal(matching.includes("study_session"), false);
+});

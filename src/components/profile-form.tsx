@@ -14,6 +14,7 @@ import {
   type University,
 } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
+import { StudyStatsCard } from "@/components/study-stats-card";
 import {
   Button,
   EmptyBlock,
@@ -172,6 +173,7 @@ export function ProfileForm() {
         title="Profile"
         description="Name, campus, courses, study style, session length, group size, and discovery visibility. These are the fields StudySync stores."
       />
+      <StudyStatsCard variant="full" />
       <form
         className="grid items-start gap-5 xl:grid-cols-2"
         autoComplete="off"

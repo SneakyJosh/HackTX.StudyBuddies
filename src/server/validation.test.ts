@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ContractValidationError, parsePostBlockBody, parsePostSessionBody, parsePutProfileBody } from "./validation.ts";
+import { ContractValidationError, parsePostBlockBody, parsePostSessionBody, parsePostStudyRatingBody, parsePutProfileBody } from "./validation.ts";
 
 const CALLER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -104,4 +104,27 @@ test("rejects an unknown profile field", () => {
       return true;
     },
   );
+});
+
+test("ratings reject unknown fields, self ratings, and an empty body", () => {
+  assert.throws(
+    () => parsePostStudyRatingBody({ studyTime: 5, leaderboard: true }, CALLER),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.details.leaderboard, "Unknown field");
+      return true;
+    },
+  );
+  assert.throws(
+    () => parsePostStudyRatingBody({ chemistry: [{ userId: CALLER, stars: 4 }] }, CALLER),
+    (error: unknown) => {
+      assert.ok(error instanceof ContractValidationError);
+      assert.equal(error.details["chemistry.0"], "Rate another student from that session");
+      return true;
+    },
+  );
+  assert.throws(() => parsePostStudyRatingBody({}, CALLER), ContractValidationError);
+  const parsed = parsePostStudyRatingBody({ environment: 3, chemistry: [{ userId: OTHER, stars: 2 }] }, CALLER);
+  assert.equal(parsed.environment, 3);
+  assert.equal(parsed.chemistry?.[0]?.userId, OTHER);
 });

@@ -11,6 +11,7 @@ import {
   type PostReportBody,
   type PostRequestBody,
   type PostSessionBody,
+  type PostStudyRatingBody,
   type PutProfileBody,
   type ReportReason,
   type RequestDirection,
@@ -36,7 +37,7 @@ const REPORT_REASONS = ["harassment", "spam", "other"] as const satisfies readon
 const PATCH_STATUSES = ["accepted", "declined", "cancelled"] as const;
 const DIRECTIONS = ["incoming", "outgoing", "all"] as const satisfies readonly RequestDirection[];
 const SESSION_VISIBILITIES = ["solo", "open", "invite_only"] as const satisfies readonly SessionVisibility[];
-const SESSION_WHENS = ["upcoming", "past"] as const satisfies readonly SessionWhen[];
+const SESSION_WHENS = ["upcoming", "past", "history", "missed"] as const satisfies readonly SessionWhen[];
 const INVITE_RESPONSES = ["accepted", "declined"] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -526,5 +527,58 @@ export function parsePostReportBody(body: Record<string, unknown>, callerId: str
     reportedUserId: reportedUserId as string,
     reason: reason as ReportReason,
     details: reportDetails,
+  };
+}
+
+export function parsePostStudyRatingBody(body: Record<string, unknown>, callerId: string): PostStudyRatingBody {
+  const details = unknownFields(body, ["studyTime", "environment", "chemistry"]);
+  let studyTime: number | undefined;
+  let environment: number | undefined;
+  if (Object.prototype.hasOwnProperty.call(body, "studyTime")) {
+    const stars = parseInteger(body.studyTime, "studyTime", 1, 5, details);
+    if (stars !== null) studyTime = stars;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "environment")) {
+    const stars = parseInteger(body.environment, "environment", 1, 5, details);
+    if (stars !== null) environment = stars;
+  }
+  const chemistry: { userId: string; stars: number }[] = [];
+  if (Object.prototype.hasOwnProperty.call(body, "chemistry")) {
+    if (!Array.isArray(body.chemistry)) {
+      details.chemistry = "chemistry must be a list";
+    } else {
+      const seen = new Set<string>();
+      body.chemistry.forEach((entry, index) => {
+        const field = `chemistry.${index}`;
+        if (!isRecord(entry)) {
+          details[field] = "chemistry entries must be userId and stars";
+          return;
+        }
+        const extra = unknownFields(entry, ["userId", "stars"]);
+        Object.assign(details, extra);
+        const userId = parseUuid(entry.userId, `${field}.userId`, details);
+        const stars = parseInteger(entry.stars, `${field}.stars`, 1, 5, details);
+        if (!userId || stars === null) return;
+        if (sameUser(userId, callerId)) {
+          details[field] = "Rate another student from that session";
+          return;
+        }
+        if (seen.has(userId)) {
+          details[field] = "Rate each student once";
+          return;
+        }
+        seen.add(userId);
+        chemistry.push({ userId, stars });
+      });
+    }
+  }
+  if (studyTime === undefined && environment === undefined && chemistry.length === 0 && Object.keys(details).length === 0) {
+    details.studyTime = "Add at least one rating";
+  }
+  fail(details);
+  return {
+    ...(studyTime === undefined ? {} : { studyTime }),
+    ...(environment === undefined ? {} : { environment }),
+    ...(chemistry.length === 0 ? {} : { chemistry }),
   };
 }

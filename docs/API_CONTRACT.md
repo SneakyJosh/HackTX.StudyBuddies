@@ -336,5 +336,41 @@ Changing university while the caller hosts a future `scheduled` booking, or has 
 
 Check-ins, discovery, matching, and study requests are unchanged. A booking does not check a student in. Focused check-ins stay out of discovery.
 
+## Study history (Milestone 10)
+
+Study hours are self-reported. The server stores the minutes it derived from the booking and the finish time. It does not verify that the student was at the building. Responses set `selfReported: true` and describe the total as self-reported. These totals are private to the author. They are not a leaderboard and they do not change `compatibilityScore` or discovery order.
+
+`SessionStatus` stays `scheduled | cancelled`. Completion is not a session-wide status. Each host or accepted participant has their own attendance: `completed` or `missed`. An elapsed booking with no attendance row is unconfirmed. Unconfirmed bookings are the `past` list. They add no minutes and no streak. The server does not convert them to missed on its own.
+
+### Who may record attendance
+Only the host, or a participant whose status is still `accepted`, may finish or mark missed. `invited`, `requested`, `declined`, `left`, and `cancelled` participants cannot gain new credit. A block in either direction with the host makes finish and miss `404` for the other person. A second finish of an existing completion returns that same record and does not add minutes. A missed row cannot later be finished. A completed row cannot later be marked missed.
+
+Finish is allowed only while `startsAt <= now <= endsAt + 2 hours`. Credited minutes are the booked length when they finish at or after `endsAt`, and the elapsed minutes from `startsAt` otherwise, never more than the booked length. Thirty or more credited minutes set `countsTowardStats`. Fewer minutes stay in history and do not. Miss is allowed once `startsAt` has passed, including after the finish window, and stores zero minutes.
+
+### Cancellation after a partial record
+Host cancellation still cancels the booking, removes commitments, and stops every new finish or miss. Attendance rows already stored stay in the database. History and stats continue to include those completed rows. The history card keeps `sessionStatus: "cancelled"` so the later cancellation is visible. Unconfirmed participants on that booking do not receive hours.
+
+### History, missed, and stats
+`GET /api/sessions?when=history` returns the caller's completed rows, newest start first. `when=missed` returns the caller's missed rows. `when=past` remains unconfirmed elapsed bookings whose caller is the host or still `accepted`. `when=upcoming` is unchanged, except a caller who already recorded attendance no longer sees that booking there.
+
+A history participant list is the accepted roster copied at record time, without the caller and without anyone blocked relative to the caller. Display names do not follow later profile edits. Course and building stay the booking's catalog rows.
+
+The streak day is the `America/Chicago` date of `startsAt`. A qualifying day has at least one completed row with `countsTowardStats`. The streak counts back from today, or from yesterday when today has no qualifying session. A gap before that anchor makes the streak 0. Week bars are Monday through Sunday in `America/Chicago`. Course streaks use the same days for one course. Check-ins, missed rows, unconfirmed bookings, and cancelled bookings with no prior completion contribute nothing.
+
+### Ratings
+`POST /api/sessions/:id/ratings` is allowed only after that caller's attendance is `completed`. Categories are `study_time`, `environment`, and `chemistry`. Study time and environment have no subject. Chemistry names one other accepted participant from the stored roster, never the author, and never a student blocked at submit time. Stars are integers 1–5. One row exists per rater, session, category, and subject. A duplicate is `409`. Ratings are returned only on the author's own history record. Nobody else can read them.
+
+### Endpoints
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/sessions/:id/finish` | Record this caller's completion. `200` |
+| POST | `/api/sessions/:id/miss` | Record this caller's miss. `200` |
+| POST | `/api/sessions/:id/ratings` | Store this caller's private ratings. `201` |
+| GET | `/api/study-stats` | This caller's self-reported streak and minutes |
+
+Finish and miss return one `StudyRecord`. Ratings body is `{ "studyTime"?: 1-5, "environment"?: 1-5, "chemistry"?: [{ "userId", "stars" }] }` with at least one field. `GET /api/study-stats` returns `{ selfReported: true, description, streakDays, qualifyingMinutes, weekMinutes, week: [{ date, minutes }], courseStreaks }`.
+
+Accepting a study request is unchanged and is not session completion. Discovery matching is unchanged.
+
 ## Contract change procedure
 Cursor owns edits to this file and to `src/types/api.ts`. Any agent requesting a change must specify the affected endpoint or type, migration impact, UI impact, and compatibility strategy. Freeze the update and sync it to both worktrees before dependent code changes.

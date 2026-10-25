@@ -6,10 +6,13 @@ import type {
   ScheduledSession,
   SessionParticipant,
   SessionParticipantStatus,
+  SessionAttendance,
   SessionPerson,
   SessionRole,
   SessionStatus,
   SessionVisibility,
+  StudyRecord,
+  StudyStats,
 } from "#api";
 
 function badPayload(): never {
@@ -140,4 +143,103 @@ export function parseOpenSession(value: unknown): OpenSession {
 
 export function parseOpenSessions(value: unknown): OpenSession[] {
   return asArray(value).map(parseOpenSession);
+}
+
+const ATTENDANCE = new Set(["completed", "missed"]);
+const CAMPUS_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function asBoolean(value: unknown): boolean {
+  if (typeof value !== "boolean") badPayload();
+  return value;
+}
+
+function asStars(value: unknown): number | null {
+  if (value === null) return null;
+  const stars = asInteger(value);
+  if (stars < 1 || stars > 5) badPayload();
+  return stars;
+}
+
+export function parseStudyRecord(value: unknown): StudyRecord {
+  const row = asRecord(value);
+  const attendance = asString(row.attendance);
+  const sessionStatus = asString(row.sessionStatus);
+  if (!ATTENDANCE.has(attendance) || !SESSION_STATUSES.has(sessionStatus)) badPayload();
+  if (row.selfReported !== true) badPayload();
+  const creditedMinutes = asInteger(row.creditedMinutes);
+  const countsTowardStats = asBoolean(row.countsTowardStats);
+  if (creditedMinutes < 0 || creditedMinutes > 180) badPayload();
+  if (attendance === "missed" && (creditedMinutes !== 0 || countsTowardStats)) badPayload();
+  if (attendance === "completed" && countsTowardStats !== (creditedMinutes >= 30)) badPayload();
+  const campusDate = asString(row.campusDate);
+  if (!CAMPUS_DATE.test(campusDate)) badPayload();
+  const ratings = asRecord(row.myRatings);
+  const chemistry = asArray(ratings.chemistry).map((entry) => {
+    const item = asRecord(entry);
+    const stars = asInteger(item.stars);
+    if (stars < 1 || stars > 5) badPayload();
+    return { userId: asString(item.userId), stars };
+  });
+  return {
+    id: asString(row.id),
+    title: asString(row.title),
+    course: asCourse(row.course),
+    location: asLocation(row.location),
+    startsAt: asString(row.startsAt),
+    endsAt: asString(row.endsAt),
+    sessionStatus: sessionStatus as SessionStatus,
+    attendance: attendance as SessionAttendance,
+    creditedMinutes,
+    countsTowardStats,
+    campusDate,
+    recordedAt: asString(row.recordedAt),
+    selfReported: true,
+    participants: asArray(row.participants).map(asPerson),
+    myRatings: {
+      studyTime: asStars(ratings.studyTime),
+      environment: asStars(ratings.environment),
+      chemistry,
+    },
+  };
+}
+
+export function parseStudyRecords(value: unknown): StudyRecord[] {
+  return asArray(value).map(parseStudyRecord);
+}
+
+export function parseStudyStats(value: unknown): StudyStats {
+  const row = asRecord(value);
+  if (row.selfReported !== true) badPayload();
+  const week = asArray(row.week).map((entry) => {
+    const day = asRecord(entry);
+    const date = asString(day.date);
+    const minutes = asInteger(day.minutes);
+    if (!CAMPUS_DATE.test(date) || minutes < 0) badPayload();
+    return { date, minutes };
+  });
+  if (week.length !== 7) badPayload();
+  const courseStreaks = asArray(row.courseStreaks).map((entry) => {
+    const course = asRecord(entry);
+    const streakDays = asInteger(course.streakDays);
+    if (streakDays < 0) badPayload();
+    return {
+      courseId: asString(course.courseId),
+      code: asString(course.code),
+      title: asString(course.title),
+      streakDays,
+    };
+  });
+  const streakDays = asInteger(row.streakDays);
+  const qualifyingMinutes = asInteger(row.qualifyingMinutes);
+  const weekMinutes = asInteger(row.weekMinutes);
+  if (streakDays < 0 || qualifyingMinutes < 0 || weekMinutes < 0) badPayload();
+  return {
+    selfReported: true,
+    description: asString(row.description),
+    streakDays,
+    qualifyingMinutes,
+    weekMinutes,
+    week,
+    courseStreaks,
+  };
 }
