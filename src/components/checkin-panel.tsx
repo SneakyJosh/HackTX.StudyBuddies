@@ -58,6 +58,7 @@ export function CheckinPanel() {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [confirmCheckout, setConfirmCheckout] = useState(false);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
@@ -176,7 +177,8 @@ export function CheckinPanel() {
       setMessages(errorLines(result));
       return;
     }
-    setNotice("Checked out. You no longer appear in discovery.");
+    setConfirmCheckout(false);
+    setNotice("Checked out without saving study time. You no longer appear in discovery.");
   }
 
   return (
@@ -201,20 +203,36 @@ export function CheckinPanel() {
               {AVAILABILITY_LABELS[active.availability]} · {STUDY_STYLE_LABELS[active.studyStyle]} · until{" "}
               {formatTimestamp(active.expiresAt)}
             </p>
+            {active.live ? null : (
+              <p className="mt-2 text-sm leading-6 text-warning">
+                Planned time ended. Open the timer and choose Finish studying to save minutes through the planned end. Time after that is not counted.
+              </p>
+            )}
             {active.availability === "focused" ? (
               <p className="mt-2 text-sm leading-6 text-warning">
                 Focused hides the student from discovery.
               </p>
-            ) : null}
+            ) : active.live ? null : (
+              <p className="mt-2 text-sm leading-6 text-muted">This check-in is no longer visible in discovery.</p>
+            )}
           </div>
-          <Button
-            variant="danger"
-            className="shrink-0"
-            disabled={checkingOut}
-            onClick={() => void checkout()}
-          >
-            {checkingOut ? "Checking out…" : "Check out"}
-          </Button>
+          {confirmCheckout ? (
+            <div className="grid gap-3">
+              <p className="text-sm leading-6">
+                Check out without saving study time? This leaves discovery and does not update History or your streak.
+              </p>
+              <Button variant="danger" disabled={checkingOut} onClick={() => void checkout()}>
+                {checkingOut ? "Checking out…" : "Check out without saving"}
+              </Button>
+              <Button variant="secondary" disabled={checkingOut} onClick={() => setConfirmCheckout(false)}>
+                Keep studying
+              </Button>
+            </div>
+          ) : (
+            <Button variant="secondary" className="shrink-0" disabled={checkingOut} onClick={() => setConfirmCheckout(true)}>
+              Check out without saving
+            </Button>
+          )}
         </section>
       ) : (
         <EmptyBlock title="You are checked out" body="Start a check-in when you are at a public study building." />
@@ -235,6 +253,11 @@ export function CheckinPanel() {
           void submit();
         }}
       >
+        {active ? (
+          <p className="text-sm leading-6 text-muted lg:col-span-2">
+            Starting a new check-in checks out the current one and does not save study time. Use Finish studying on the timer to record it.
+          </p>
+        ) : null}
         {messages.length > 0 || notice ? (
           <div className="grid gap-5 lg:col-span-2">
             <FieldError messages={messages} />

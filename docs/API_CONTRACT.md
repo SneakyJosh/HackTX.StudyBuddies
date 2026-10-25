@@ -41,7 +41,8 @@ type Profile = { id: string; displayName: string; universityId: string; major: s
 type Location = { id: string; universityId: string; name: string; buildingCode: string; description: string | null };
 type PublicLocation = Pick<Location, 'id' | 'name' | 'buildingCode'>;
 type Course = { id: string; universityId: string; code: string; title: string };
-type Checkin = { id: string; locationId: string; courseId: string; availability: Availability; studyStyle: StudyStyle; startedAt: string; expiresAt: string };
+type Checkin = { id: string; locationId: string; courseId: string; availability: Availability; studyStyle: StudyStyle; startedAt: string; expiresAt: string; live: boolean };
+type CheckinStudyRecord = { id: string; checkinId: string; course: Course; location: PublicLocation; studyStyle: StudyStyle; availability: Availability; startedAt: string; finishedAt: string; creditedMinutes: number; countsTowardStats: boolean; campusDate: string; recordedAt: string; selfReported: true };
 type DiscoveryUser = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
 type DiscoveryMatch = { user: DiscoveryUser; location: PublicLocation; course: Course; availability: Availability; compatibilityScore: number; reasons: MatchReason[]; checkinExpiresAt: string; requestStatus: RequestStatus | null };
 type RequestCounterpart = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
@@ -84,9 +85,11 @@ Check-in `courseId` must be one of the caller's `courseIds`. Check-in `locationI
 | GET | `/api/courses` | yes | Courses for the caller's university; optional `q` filter |
 | GET | `/api/profile` | yes | Current user's profile |
 | PUT | `/api/profile` | yes | Create or replace the current user's profile |
-| GET | `/api/checkin` | yes | Current active check-in, or `null` |
+| GET | `/api/checkin` | yes | Current finishable check-in, or `null` |
 | POST | `/api/checkin` | yes | Create or replace the current user's check-in |
-| DELETE | `/api/checkin` | yes | Check out the current user |
+| DELETE | `/api/checkin` | yes | Check out without saving study time |
+| POST | `/api/checkin/:id/finish` | yes | Save a personal study record and check out |
+| GET | `/api/checkin/history` | yes | The caller's finished personal study sessions |
 | GET | `/api/discovery` | yes | Discover same-campus active matches |
 | GET | `/api/requests` | yes | Current user's incoming and outgoing requests |
 | POST | `/api/requests` | yes | Send a request |
@@ -117,7 +120,7 @@ Body: `{ "displayName": "Demo Student A", "universityId": "22222222-2222-4222-82
 Response: `{ "data": Profile }`. `universityId` must be an allowed campus. Every course id must belong to that campus. Omitted `visible` is stored as `false`. Changing `universityId` while the caller has an active check-in returns `409 CONFLICT`. The handler replaces `profile_courses` with `courseIds` in the same transaction.
 
 ### GET `/api/checkin`
-Returns `{ "data": Checkin | null }`. A check-in is active only when `checked_out_at` is null and `expires_at` is greater than server time. Expired rows are returned as `null`.
+Returns `{ "data": Checkin | null }`. The row is returned while `checked_out_at` is null and server time is still within 2 hours after `expires_at`. `live` is true only while `expires_at` is in the future. Discovery still requires that same live window. A check-in in the grace period is not discoverable. Refreshing the site uses `startedAt` and `expiresAt` from this response. The browser does not store the elapsed time.
 
 ### POST `/api/checkin`
 Body: `{ "locationId": "uuid", "courseId": "uuid", "durationMinutes": 120, "availability": "available", "studyStyle": "collaborative" }`.
@@ -129,7 +132,13 @@ Requires a completed profile and `visible: true`. Otherwise `403 FORBIDDEN`. `co
 Setting `visible` to `false` later does not check the user out. That user drops out of discovery until they opt in again.
 
 ### DELETE `/api/checkin`
-Response `200 { "data": { "checkedOut": true } }`. Idempotent when the caller is already checked out or expired.
+Response `200 { "data": { "checkedOut": true } }`. This is check-out without a study record. It does not add minutes, change History, or complete a booking. It is idempotent when the caller is already checked out or the 2-hour finish window has closed.
+
+### POST `/api/checkin/:id/finish`
+No body. The server computes credited minutes from `started_at` through `min(now, expires_at)`. A full minute is required for study-time credit. Minutes after `expires_at` are not credited. The planned check-in length stays 30–180 minutes. Finishing checks the caller out and stores one personal study record. A second finish of the same check-in returns that record and does not add minutes. Checkout or replace before finish is `409`. Finish after `expires_at + 2 hours` is `409` and writes nothing. Another student's check-in is `404`. The response is one `CheckinStudyRecord` with `selfReported: true`.
+
+### GET `/api/checkin/history`
+Returns `{ "data": CheckinStudyRecord[], "meta": { "count": number } }`, newest start first. These records are private to the caller. They do not include other students or ratings.
 
 ### GET `/api/discovery?locationId=uuid&courseId=uuid`
 Both filters are optional. Response `{ "data": DiscoveryMatch[], "meta": { "count": number } }`.
@@ -355,7 +364,7 @@ Host cancellation still cancels the booking, removes commitments, and stops ever
 
 A history participant list is the accepted roster copied at record time, without the caller and without anyone blocked relative to the caller. Display names do not follow later profile edits. Course and building stay the booking's catalog rows.
 
-The study day is the `America/Chicago` date of `startsAt`. Total study time adds every completed session with at least 1 credited minute. A streak day is a campus date whose completed sessions add up to at least 5 credited minutes. Sessions of 1–4 minutes count toward the total and toward that day's combined total. They do not qualify the day on their own unless the day's combined total reaches 5. The streak counts back from today, or from yesterday when today is under 5 minutes. A gap before that anchor makes the streak 0. Week bars are Monday through Sunday in `America/Chicago` and include every credited minute, including days under 5. Course streaks use the same daily total for one course. Check-ins, missed rows, unconfirmed bookings, and cancelled bookings with no prior completion contribute nothing.
+The study day is the `America/Chicago` date of the booking `startsAt` or the check-in `startedAt`. A session that crosses midnight keeps every credited minute on the start date. Total study time adds every completed booking and every finished personal check-in with at least 1 credited minute. A streak day is a campus date whose completed bookings and finished check-ins add up to at least 5 credited minutes. Sessions of 1–4 minutes count toward the total and toward that day's combined total. They do not qualify the day on their own unless the day's combined total reaches 5. The streak counts back from today, or from yesterday when today is under 5 minutes. A gap before that anchor makes the streak 0. Week bars are Monday through Sunday in `America/Chicago` and include every credited minute, including days under 5. Course streaks use the same daily total for one course. Missed rows, unconfirmed bookings, cancelled bookings with no prior completion, and check-ins that were closed without Finish studying contribute nothing.
 
 ### Ratings
 `POST /api/sessions/:id/ratings` is allowed only after that caller's attendance is `completed`. Categories are `study_time`, `environment`, and `chemistry`. Study time and environment have no subject. Chemistry names one other accepted participant from the stored roster, never the author, and never a student blocked at submit time. Stars are integers 1–5. One row exists per rater, session, category, and subject. A duplicate is `409`. Ratings are returned only on the author's own history record. Nobody else can read them.

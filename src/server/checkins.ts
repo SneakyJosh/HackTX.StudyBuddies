@@ -1,29 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Availability, Checkin, PostCheckinBody, StudyStyle } from "@/types/api";
+import type { Checkin, CheckinStudyRecord, PostCheckinBody } from "@/types/api";
 
-import { forbiddenError, internalError, throwMappedDbError, validationError } from "./errors";
-import { asIsoTimestamp, asRecord, asString } from "./json";
+import { parseCheckin, parseCheckinStudyRecord, parseCheckinStudyRecords } from "./checkin-payload";
+import { forbiddenError, throwMappedDbError, validationError } from "./errors";
 import { getProfile } from "./profile";
 
-const AVAILABILITIES = new Set(["available", "questions_only", "focused"]);
-const STUDY_STYLES = new Set(["quiet", "collaborative", "flexible"]);
-
-export function parseCheckin(value: unknown): Checkin {
-  const row = asRecord(value);
-  const availability = asString(row.availability);
-  const studyStyle = asString(row.studyStyle);
-  if (!AVAILABILITIES.has(availability) || !STUDY_STYLES.has(studyStyle)) throw internalError();
-  return {
-    id: asString(row.id),
-    locationId: asString(row.locationId),
-    courseId: asString(row.courseId),
-    availability: availability as Availability,
-    studyStyle: studyStyle as StudyStyle,
-    startedAt: asIsoTimestamp(row.startedAt),
-    expiresAt: asIsoTimestamp(row.expiresAt),
-  };
-}
+export { parseCheckin, parseCheckinStudyRecord, parseCheckinStudyRecords };
 
 export async function getActiveCheckin(supabase: SupabaseClient): Promise<Checkin | null> {
   const { data, error } = await supabase.rpc("current_checkin");
@@ -71,4 +54,16 @@ export async function replaceCheckin(
 export async function checkoutActive(supabase: SupabaseClient): Promise<void> {
   const { error } = await supabase.rpc("checkout_active");
   if (error) throwMappedDbError(error);
+}
+
+export async function finishCheckin(supabase: SupabaseClient, checkinId: string): Promise<CheckinStudyRecord> {
+  const { data, error } = await supabase.rpc("finish_checkin_study", { p_checkin_id: checkinId });
+  if (error) throwMappedDbError(error);
+  return parseCheckinStudyRecord(data);
+}
+
+export async function listCheckinStudyRecords(supabase: SupabaseClient): Promise<CheckinStudyRecord[]> {
+  const { data, error } = await supabase.rpc("list_checkin_study_records");
+  if (error) throwMappedDbError(error);
+  return parseCheckinStudyRecords(data);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   deleteCheckin,
   getCheckin,
@@ -9,12 +9,15 @@ import {
   getProfile,
   isApiError,
   postCheckin,
+  postFinishCheckin,
 } from "@/lib/api-client";
+import { CHECKIN_FINISH_GRACE_MS } from "@/lib/study-time";
 import { AVAILABILITY_LABELS, AVAILABILITIES, STUDY_STYLE_LABELS, STUDY_STYLES, formatTimestamp } from "@/lib/labels";
 import {
   VALIDATION,
   type Availability,
   type Checkin,
+  type CheckinStudyRecord,
   type Course,
   type Location,
   type PostCheckinBody,
@@ -53,10 +56,21 @@ export function FocusSheet({
   const [messages, setMessages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [confirmCheckout, setConfirmCheckout] = useState(false);
+  const [saved, setSaved] = useState<CheckinStudyRecord | null>(null);
+  const savedHold = useRef<CheckinStudyRecord | null>(null);
   const [now, setNow] = useState<number | null>(null);
 
+  function closeSheet() {
+    savedHold.current = null;
+    setSaved(null);
+    setConfirmCheckout(false);
+    onClose();
+  }
+
   useEffect(() => {
-    if (!open || !demo.ready || !demo.userId) return;
+    if (!open || !demo.ready || !demo.userId || savedHold.current) return;
     let cancelled = false;
     void (async () => {
       setPhase("loading");
@@ -66,7 +80,7 @@ export function FocusSheet({
         getLocations(),
         getCheckin(),
       ]);
-      if (cancelled) return;
+      if (cancelled || savedHold.current) return;
       const failure = [profileResult, courseResult, locationResult, checkinResult].find(isApiError);
       if (failure && isApiError(failure)) {
         setLoadError(failure.error.message);
@@ -103,17 +117,20 @@ export function FocusSheet({
   }, [open, demo.ready, demo.userId, demo.revision, preset?.courseId, preset?.locationId, preset?.durationMinutes]);
 
   useEffect(() => {
-    if (!open || !active) return;
+    if (!open || !active || saved) return;
     const tick = () => setNow(Date.now());
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [open, active]);
+  }, [open, active, saved]);
 
   const profileCourses = courses.filter((course) => profile?.courseIds.includes(course.id));
   const activeCourse = courses.find((course) => course.id === active?.courseId);
   const activeLocation = locations.find((location) => location.id === active?.locationId);
-  const remaining = active && now !== null ? Math.max(0, new Date(active.expiresAt).getTime() - now) : null;
+  const expiresAtMs = active ? new Date(active.expiresAt).getTime() : null;
+  const remaining = active && now !== null && expiresAtMs !== null ? Math.max(0, expiresAtMs - now) : null;
+  const plannedEnded = expiresAtMs !== null && now !== null && now >= expiresAtMs;
+  const windowClosed = expiresAtMs !== null && now !== null && now > expiresAtMs + CHECKIN_FINISH_GRACE_MS;
 
   async function submit() {
     if (!draft) return;
@@ -135,7 +152,23 @@ export function FocusSheet({
     setActive(result.data);
   }
 
-  async function checkout() {
+  async function finish() {
+    if (!active) return;
+    setFinishing(true);
+    setMessages([]);
+    const result = await postFinishCheckin(active.id);
+    setFinishing(false);
+    if (isApiError(result)) {
+      setMessages(errorLines(result));
+      return;
+    }
+    savedHold.current = result.data;
+    setSaved(result.data);
+    setActive(null);
+    setConfirmCheckout(false);
+  }
+
+  async function checkoutWithoutSaving() {
     setCheckingOut(true);
     setMessages([]);
     const result = await deleteCheckin();
@@ -144,12 +177,14 @@ export function FocusSheet({
       setMessages(errorLines(result));
       return;
     }
+    savedHold.current = null;
     setActive(null);
+    setConfirmCheckout(false);
     onClose();
   }
 
   return (
-    <Sheet open={open} title={active ? "Studying" : "Start focusing"} onClose={onClose}>
+    <Sheet open={open} title={saved ? "Study saved" : active ? "Studying" : "Start focusing"} onClose={closeSheet}>
       {phase === "loading" ? <p role="status">Loading check-in</p> : null}
       {phase === "error" ? <ErrorBlock title="Check-in unavailable" message={loadError} /> : null}
       {phase === "ready" && !profile ? (
@@ -160,7 +195,21 @@ export function FocusSheet({
           Turn on discovery visibility in your profile before checking in.
         </p>
       ) : null}
-      {phase === "ready" && profile && active ? (
+      {phase === "ready" && saved ? (
+        <div className="grid gap-4 text-center">
+          <p className="font-display text-2xl font-extrabold">Study session saved</p>
+          <p className="text-sm leading-6">
+            {saved.creditedMinutes} self-reported minute{saved.creditedMinutes === 1 ? "" : "s"}. This time is not independently verified.
+          </p>
+          <p className="text-sm leading-6 text-muted">
+            {saved.creditedMinutes < 1
+              ? "No full minute was completed, so this does not add study time."
+              : "Home, Profile, and History now include this personal study session."}
+          </p>
+          <Button onClick={closeSheet}>Close</Button>
+        </div>
+      ) : null}
+      {phase === "ready" && profile && active && !saved ? (
         <div className="grid justify-items-center gap-4 text-center">
           <TimerRing remaining={remaining} startedAt={active.startedAt} expiresAt={active.expiresAt} />
           <p className="font-display text-3xl font-extrabold tabular-nums">
@@ -174,22 +223,51 @@ export function FocusSheet({
             {AVAILABILITY_LABELS[active.availability]} · {STUDY_STYLE_LABELS[active.studyStyle]} · until{" "}
             {formatTimestamp(active.expiresAt)}
           </p>
-          {active.availability === "focused" ? (
+          {plannedEnded ? (
             <p className="rounded-[14px] bg-warning-soft px-4 py-3 text-sm leading-6 text-warning">
-              Focus mode hides you from discovery. Other students cannot see this check-in.
+              Planned time ended. Finish studying saves the minutes through {formatTimestamp(active.expiresAt)}. Time after that is not counted.
+            </p>
+          ) : active.availability === "focused" || !active.live ? (
+            <p className="rounded-[14px] bg-warning-soft px-4 py-3 text-sm leading-6 text-warning">
+              {active.availability === "focused"
+                ? "Focus mode hides you from discovery. Other students cannot see this check-in."
+                : "This check-in is no longer visible in discovery."}
             </p>
           ) : (
             <p className="text-sm leading-6 text-muted">
-              You are visible at this public building. Focus mode is the choice that hides you.
+              You are visible at this public building. Closing this window keeps the timer running.
             </p>
           )}
           <FieldError messages={messages} />
-          <Button variant="danger" disabled={checkingOut} onClick={() => void checkout()}>
-            {checkingOut ? "Ending…" : "End session"}
-          </Button>
+          {confirmCheckout ? (
+            <div className="grid w-full gap-3 rounded-[14px] bg-surface-muted p-4 text-left">
+              <p className="text-sm leading-6">
+                Check out without saving study time? This leaves discovery and does not update History or your streak.
+              </p>
+              <Button variant="danger" disabled={checkingOut || finishing} onClick={() => void checkoutWithoutSaving()}>
+                {checkingOut ? "Checking out…" : "Check out without saving"}
+              </Button>
+              <Button variant="secondary" disabled={checkingOut} onClick={() => setConfirmCheckout(false)}>
+                Keep studying
+              </Button>
+            </div>
+          ) : windowClosed ? (
+            <p className="text-sm leading-6 text-muted">
+              The finish window has closed. No study time was saved. Close this window and start a new check-in when you are ready.
+            </p>
+          ) : (
+            <div className="grid w-full gap-3">
+              <Button disabled={finishing || checkingOut} onClick={() => void finish()}>
+                {finishing ? "Saving…" : "Finish studying"}
+              </Button>
+              <Button variant="secondary" disabled={finishing || checkingOut} onClick={() => setConfirmCheckout(true)}>
+                Check out without saving
+              </Button>
+            </div>
+          )}
         </div>
       ) : null}
-      {phase === "ready" && profile && draft && !active ? (
+      {phase === "ready" && profile && draft && !active && !saved ? (
         <form
           className="grid gap-4"
           onSubmit={(event) => {

@@ -135,12 +135,21 @@ export function HomeDashboard() {
                 {AVAILABILITY_LABELS[checkin.availability]}
               </span>
             </div>
-            <p className="mt-2 text-sm text-muted">Until {formatTimestamp(checkin.expiresAt)}</p>
+            <p className="mt-2 text-sm text-muted">
+              {checkin.live ? `Until ${formatTimestamp(checkin.expiresAt)}` : "Planned time ended"}
+            </p>
             <p className="mt-2 text-sm">{activeLocation ? activeLocation.name : "Public building"}</p>
+            {checkin.live ? null : (
+              <p className="mt-3 text-sm leading-6 text-warning">
+                Finish studying to save the minutes through the planned end. Time after that is not counted.
+              </p>
+            )}
             {checkin.availability === "focused" ? (
               <p className="mt-3 text-sm leading-6 text-warning">Focus mode hides this check-in from discovery.</p>
-            ) : (
+            ) : checkin.live ? (
               <p className="mt-3 text-sm leading-6 text-muted">Other students on campus can see this public building.</p>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-muted">This check-in is no longer visible in discovery.</p>
             )}
           </article>
         ) : null}

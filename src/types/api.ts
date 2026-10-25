@@ -147,6 +147,8 @@ export type Checkin = {
   studyStyle: StudyStyle;
   startedAt: string;
   expiresAt: string;
+  /** True while the planned end is still in the future. Discovery uses the same rule. */
+  live: boolean;
 };
 
 export type DiscoveryUser = {
@@ -348,6 +350,25 @@ export type StudyStats = {
   weekMinutes: number;
   week: StudyDayMinutes[];
   courseStreaks: StudyCourseStreak[];
+};
+
+/** One caller's finished personal check-in. Hours are self-reported and are not a match input. */
+export type CheckinStudyRecord = {
+  id: string;
+  checkinId: string;
+  course: Course;
+  location: PublicLocation;
+  studyStyle: StudyStyle;
+  availability: Availability;
+  startedAt: string;
+  finishedAt: string;
+  creditedMinutes: number;
+  /** True when the check-in has at least 1 credited minute. */
+  countsTowardStats: boolean;
+  /** America/Chicago date of the check-in start, `YYYY-MM-DD`. */
+  campusDate: string;
+  recordedAt: string;
+  selfReported: true;
 };
 
 export type PostStudyRatingBody = {

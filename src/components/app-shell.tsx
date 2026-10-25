@@ -71,7 +71,7 @@ function SignedInShell({
   const accountLabel = labelForEmail(email) ?? email ?? "Signed in";
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [sessionAlerts, setSessionAlerts] = useState<number | null>(null);
-  const [studyingUntil, setStudyingUntil] = useState<string | null>(null);
+  const [studyBanner, setStudyBanner] = useState<{ until: string; live: boolean } | null>(null);
   const currentTab = TABS.find((tab) => tab.href === pathname);
 
   useEffect(() => {
@@ -105,7 +105,9 @@ function SignedInShell({
     let cancelled = false;
     void getCheckin().then((result) => {
       if (cancelled || isApiError(result)) return;
-      setStudyingUntil(result.data ? formatTimestamp(result.data.expiresAt) : null);
+      setStudyBanner(
+        result.data ? { until: formatTimestamp(result.data.expiresAt), live: result.data.live } : null,
+      );
     });
     return () => {
       cancelled = true;
@@ -167,13 +169,13 @@ function SignedInShell({
               </button>
             </div>
           </header>
-          {studyingUntil ? (
+          {studyBanner ? (
             <Link
               href="/sessions"
               className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-full bg-foreground px-4 py-2 text-sm font-bold text-background lg:mx-8"
             >
-              <span>Studying</span>
-              <span>until {studyingUntil}</span>
+              <span>{studyBanner.live ? "Studying" : "Planned time ended"}</span>
+              <span>{studyBanner.live ? `until ${studyBanner.until}` : "Finish to save minutes"}</span>
             </Link>
           ) : null}
           <div className="flex-1 px-[18px] pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">

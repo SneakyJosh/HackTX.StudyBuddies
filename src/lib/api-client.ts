@@ -5,6 +5,7 @@ import type {
   ApiErrorCode,
   ApiList,
   Checkin,
+  CheckinStudyRecord,
   CheckoutResult,
   Course,
   DiscoveryMatch,
@@ -129,6 +130,16 @@ export async function postCheckin(body: PostCheckinBody): Promise<ApiData<Checki
 
 export async function deleteCheckin(): Promise<ApiData<CheckoutResult> | ApiError> {
   return publishWrite(await request<ApiData<CheckoutResult>>("/api/checkin", { method: "DELETE" }));
+}
+
+export async function postFinishCheckin(checkinId: string): Promise<ApiData<CheckinStudyRecord> | ApiError> {
+  return publishWrite(
+    await request<ApiData<CheckinStudyRecord>>(`/api/checkin/${encodeURIComponent(checkinId)}/finish`, { method: "POST" }),
+  );
+}
+
+export async function getCheckinHistory(): Promise<ApiList<CheckinStudyRecord> | ApiError> {
+  return request<ApiList<CheckinStudyRecord>>("/api/checkin/history");
 }
 
 export async function getDiscovery(

@@ -294,3 +294,46 @@ test("streak days combine credited minutes without shortening bookings", () => {
   assert.match(bookings, /ends_at >= starts_at \+ interval '30 minutes'/);
   assert.match(bookings, /interval '180 minutes'/);
 });
+
+test("personal check-in study records are private and do not complete bookings", () => {
+  const migration = readFileSync("supabase/migrations/0007_checkin_study_records.sql", "utf8");
+  const earlier = [
+    "0001_studysync.sql",
+    "0002_fix_pair_lock_least_greatest.sql",
+    "0003_study_sessions.sql",
+    "0004_fix_create_session_column_ambiguity.sql",
+    "0005_study_history.sql",
+    "0006_study_time_streak_days.sql",
+  ];
+  for (const file of earlier) {
+    assert.equal(readFileSync(`supabase/migrations/${file}`, "utf8").includes("checkin_study_records"), false, file);
+  }
+  assert.match(migration, /create table public\.checkin_study_records/);
+  assert.match(migration, /checkin_id uuid primary key references public\.checkins \(id\) on delete restrict/);
+  assert.match(migration, /counts_toward_stats = \(credited_minutes >= 1\)/);
+  assert.match(migration, /least\(finished, open_checkin\.expires_at\)/);
+  assert.match(migration, /interval '2 hours'/);
+  assert.match(migration, /America\/Chicago/);
+  assert.match(migration, /when unique_violation then/);
+  assert.match(migration, /hashtextextended\(uid::text, 0\)/);
+  assert.match(migration, /if auth\.uid\(\) is distinct from p_user_id then/);
+  assert.match(migration, /'live', expires_at > pg_catalog\.clock_timestamp\(\)/);
+  assert.match(migration, /expires_at \+ interval '2 hours' > pg_catalog\.clock_timestamp\(\)/);
+  assert.equal(migration.includes("p_credited"), false);
+  assert.equal(migration.includes("p_minutes"), false);
+  assert.equal(migration.includes("insert into public.study_sessions"), false);
+  assert.equal(migration.includes("update public.study_sessions"), false);
+  assert.equal(migration.includes("finish_study_session"), false);
+  assert.equal(migration.includes("cancel_study_session"), false);
+  assert.equal(migration.includes("discovery_candidates"), false);
+  assert.equal(migration.includes("grant insert"), false);
+  assert.equal(migration.includes("grant update"), false);
+  assert.equal(migration.includes("grant delete"), false);
+  assert.equal(migration.includes("grant select on public.checkin_study_records"), false);
+  assert.match(migration, /revoke all on function public\.checkin_study_payload\(uuid\) from public, anon, authenticated;/);
+  assert.match(migration, /grant execute on function public\.finish_checkin_study\(uuid\) to authenticated;/);
+  assert.equal(/drop table/i.test(migration), false);
+  const matching = readFileSync("src/server/matching.ts", "utf8");
+  assert.equal(matching.includes("checkin_study_records"), false);
+  assert.equal(matching.includes("streak"), false);
+});

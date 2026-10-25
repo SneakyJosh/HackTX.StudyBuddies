@@ -132,9 +132,14 @@ export function SessionsBoard() {
               {AVAILABILITY_LABELS[checkin.availability]}
             </span>
           </div>
-          <p className="mt-2 text-sm text-muted">Until {formatTimestamp(checkin.expiresAt)}</p>
+          <p className="mt-2 text-sm text-muted">
+            {checkin.live ? `Until ${formatTimestamp(checkin.expiresAt)}` : "Planned time ended. Finish studying to save minutes through the planned end."}
+          </p>
           <p className="mt-2 text-sm">{location?.name ?? "Public building"}</p>
           <p className="mt-1 text-sm text-muted">{STUDY_STYLE_LABELS[checkin.studyStyle]}</p>
+          {checkin.live ? null : (
+            <p className="mt-2 text-sm leading-6 text-muted">Time after the planned end is not counted, and this check-in is no longer visible in discovery.</p>
+          )}
         </article>
       ) : (
         <EmptyBlock title="No active check-in" body="Start one when you are at a public campus building." />
