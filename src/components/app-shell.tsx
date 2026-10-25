@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { getCheckin, getRequests, getSessions, isApiError } from "@/lib/api-client";
+import { getCheckin, getProfile, getRequests, getSessions, isApiError } from "@/lib/api-client";
+import { needsProfileSetup } from "@/lib/profile-setup";
 import { formatTimestamp } from "@/lib/labels";
 import { labelForEmail, signOut } from "@/lib/session";
 import { BrandMark } from "@/components/brand-mark";
@@ -73,6 +74,18 @@ function SignedInShell({
   const [sessionAlerts, setSessionAlerts] = useState<number | null>(null);
   const [studyBanner, setStudyBanner] = useState<{ until: string; live: boolean } | null>(null);
   const currentTab = TABS.find((tab) => tab.href === pathname);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getProfile().then((result) => {
+      if (cancelled || isApiError(result) || result.data) return;
+      const search = window.location.search;
+      if (needsProfileSetup(false, pathname, search)) router.replace("/profile?setup=1");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, revision, pathname, router]);
 
   useEffect(() => {
     let cancelled = false;

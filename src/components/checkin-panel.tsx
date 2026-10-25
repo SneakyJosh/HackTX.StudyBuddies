@@ -22,6 +22,7 @@ import {
   type StudyStyle,
 } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
+import { readPreferredLocationId } from "@/lib/preferred-location";
 import {
   Button,
   EmptyBlock,
@@ -100,9 +101,13 @@ export function CheckinPanel() {
       setCourses(courseResult.data);
       setLocations(locationResult.data);
       setActive(checkinResult.data);
+      const storedLocation = readPreferredLocationId();
+      const startingLocation = locationResult.data.some((location) => location.id === storedLocation)
+        ? storedLocation ?? ""
+        : locationResult.data[0]?.id ?? "";
       setDraft({
         courseId: profileCourses[0]?.id ?? "",
-        locationId: locationResult.data[0]?.id ?? "",
+        locationId: startingLocation,
         durationMinutes: nextProfile?.preferredDurationMinutes ?? VALIDATION.durationMinutes.min,
         availability: "available",
         studyStyle: nextProfile?.studyStyle ?? "collaborative",

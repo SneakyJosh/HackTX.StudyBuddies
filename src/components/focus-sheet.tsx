@@ -28,6 +28,7 @@ import {
   type StudyStyle,
 } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
+import { readPreferredLocationId } from "@/lib/preferred-location";
 import { CheckinFeedback } from "@/components/study-feedback";
 import { Button, ErrorBlock, FieldError, Sheet, errorLines, fieldClass, inputClass } from "@/components/ui";
 
@@ -115,9 +116,12 @@ export function FocusSheet({
       const presetCourse = preset?.courseId && profileCourses.some((course) => course.id === preset.courseId)
         ? preset.courseId
         : profileCourses[0]?.id ?? "";
+      const storedLocation = readPreferredLocationId();
       const presetLocation = preset?.locationId && locationResult.data.some((location) => location.id === preset.locationId)
         ? preset.locationId
-        : locationResult.data[0]?.id ?? "";
+        : locationResult.data.some((location) => location.id === storedLocation)
+          ? storedLocation ?? ""
+          : locationResult.data[0]?.id ?? "";
       setDraft({
         courseId: presetCourse,
         locationId: presetLocation,

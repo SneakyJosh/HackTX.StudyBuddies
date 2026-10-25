@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { missingPublicSupabaseEnv } from "@/lib/browser-supabase";
-import { signInWithPassword } from "@/lib/session";
+import { signUpProblem } from "@/lib/account-form";
+import { signInWithPassword, signUpWithPassword } from "@/lib/session";
 import { DEMO_UNIVERSITY } from "@/types/api";
 import { BrandMark } from "@/components/brand-mark";
 import { useDemo } from "@/components/demo-provider";
@@ -20,9 +21,11 @@ function signInProblem(email: string, password: string): string | null {
 export function SignInPanel() {
   const demo = useDemo();
   const router = useRouter();
-  const [view, setView] = useState<"welcome" | "sign-in">("welcome");
+  const [view, setView] = useState<"welcome" | "sign-in" | "sign-up" | "check-email">("welcome");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +58,30 @@ export function SignInPanel() {
       return;
     }
     router.push("/home");
+  }
+
+  async function register() {
+    if (missingEnv.length > 0) return;
+    const problem = signUpProblem({ displayName, email, password, confirmPassword });
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    const result = await signUpWithPassword({ displayName, email, password });
+    setPassword("");
+    setConfirmPassword("");
+    setSubmitting(false);
+    if (result.status === "error") {
+      setError(result.message);
+      return;
+    }
+    if (result.status === "confirm-email") {
+      setView("check-email");
+      return;
+    }
+    router.push("/profile?setup=1");
   }
 
   return (
@@ -99,8 +126,18 @@ export function SignInPanel() {
                 <Button className="h-12 w-full text-base" onClick={() => setView("sign-in")}>
                   Sign in
                 </Button>
+                <Button
+                  variant="secondary"
+                  className="h-12 w-full text-base"
+                  onClick={() => {
+                    setError(null);
+                    setView("sign-up");
+                  }}
+                >
+                  Sign up
+                </Button>
                 <p className="text-center text-sm leading-6 text-muted lg:text-left">
-                  Use the email and password for your StudyBuddie account.
+                  Create an account, or sign in with the email and password you already use.
                 </p>
                 {demo.userId ? (
                   <div className="rounded-[20px] border border-line bg-surface px-4 py-4 text-left">
@@ -111,6 +148,122 @@ export function SignInPanel() {
                   </div>
                 ) : null}
               </div>
+            </div>
+          ) : view === "check-email" ? (
+            <div className="flex flex-1 flex-col justify-center">
+              <h1 className="font-display text-[2rem] leading-none font-extrabold">Check your email</h1>
+              <p className="mt-4 text-[15px] leading-6 text-muted">
+                StudyBuddie sent a confirmation link to {email.trim() || "your email"}. Open it to finish creating
+                the account, then sign in and set up your profile.
+              </p>
+              <Button
+                className="mt-8 h-12 w-full text-base"
+                onClick={() => {
+                  setError(null);
+                  setView("sign-in");
+                }}
+              >
+                Back to sign in
+              </Button>
+            </div>
+          ) : view === "sign-up" ? (
+            <div className="flex flex-1 flex-col justify-center">
+              <button
+                type="button"
+                className="mb-5 grid h-11 w-11 place-items-center rounded-full border border-line bg-surface text-lg font-bold"
+                onClick={() => {
+                  setView("welcome");
+                  setError(null);
+                }}
+              >
+                <span aria-hidden="true">‹</span>
+                <span className="sr-only">Back</span>
+              </button>
+              <h1 className="font-display text-[2rem] leading-none font-extrabold">Create your account</h1>
+              <p className="mt-2 text-[15px] text-muted">Use your email. You will set up your study profile next.</p>
+              {missingEnv.length > 0 ? (
+                <div className="mt-6">
+                  <ErrorBlock
+                    title="Sign-up is not configured"
+                    message="This app needs its public Supabase URL and publishable key in the local environment."
+                  />
+                </div>
+              ) : (
+                <form
+                  className="mt-6 grid gap-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void register();
+                  }}
+                >
+                  <label className={fieldClass} htmlFor="sign-up-name">
+                    Full name
+                    <input
+                      id="sign-up-name"
+                      className={inputClass}
+                      autoComplete="name"
+                      maxLength={40}
+                      value={displayName}
+                      onChange={(event) => setDisplayName(event.target.value)}
+                    />
+                  </label>
+                  <label className={fieldClass} htmlFor="sign-up-email">
+                    Email
+                    <input
+                      id="sign-up-email"
+                      className={inputClass}
+                      type="email"
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </label>
+                  <label className={fieldClass} htmlFor="sign-up-password">
+                    Password
+                    <input
+                      id="sign-up-password"
+                      className={inputClass}
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                  </label>
+                  <label className={fieldClass} htmlFor="sign-up-confirm">
+                    Confirm password
+                    <input
+                      id="sign-up-confirm"
+                      className={inputClass}
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="min-h-11 justify-self-start text-sm font-bold text-accent"
+                    onClick={() => setShowPassword((value) => !value)}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? "Hide passwords" : "Show passwords"}
+                  </button>
+                  <p className="text-sm leading-5 text-muted">
+                    Use at least 8 characters, with a letter and a number. The password is sent to sign-up and is not
+                    saved in the app.
+                  </p>
+                  {error ? (
+                    <p role="alert" className="text-sm font-semibold text-danger">
+                      {error}
+                    </p>
+                  ) : null}
+                  <Button type="submit" disabled={submitting} className="h-12 w-full text-base">
+                    {submitting ? "Creating account…" : "Create account"}
+                  </Button>
+                </form>
+              )}
             </div>
           ) : (
             <div className="flex flex-1 flex-col justify-center">

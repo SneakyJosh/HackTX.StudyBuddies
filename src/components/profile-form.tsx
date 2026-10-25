@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { getCourses, getProfile, getUniversities, isApiError, putProfile } from "@/lib/api-client";
+import { useRouter, useSearchParams } from "next/navigation";
+import { getCourses, getLocations, getProfile, getUniversities, isApiError, putProfile } from "@/lib/api-client";
+import { getBrowserSupabase } from "@/lib/browser-supabase";
 import { labelForEmail } from "@/lib/session";
+import { readPreferredLocationId, writePreferredLocationId } from "@/lib/preferred-location";
 import { ACADEMIC_YEAR_LABELS, ACADEMIC_YEARS, STUDY_STYLE_LABELS, STUDY_STYLES } from "@/lib/labels";
 import {
   VALIDATION,
@@ -12,6 +15,7 @@ import {
   type PutProfileBody,
   type StudyStyle,
   type University,
+  type Location,
 } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { StudyStatsCard } from "@/components/study-stats-card";
@@ -69,12 +73,16 @@ function formFromProfile(profile: Profile): ProfileFormState {
 
 export function ProfileForm() {
   const demo = useDemo();
+  const router = useRouter();
+  const setup = useSearchParams().get("setup") === "1";
   const formId = useId();
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
   const [loadError, setLoadError] = useState("Could not load the profile form.");
   const [reloadKey, setReloadKey] = useState(0);
   const [universities, setUniversities] = useState<University[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [preferredLocationId, setPreferredLocationId] = useState("");
   const [form, setForm] = useState<ProfileFormState | null>(null);
   const [messages, setMessages] = useState<string[]>([]);
   const [saved, setSaved] = useState("");
@@ -85,29 +93,36 @@ export function ProfileForm() {
     let cancelled = false;
     void (async () => {
       setPhase("loading");
-      const [universityResult, courseResult, profileResult] = await Promise.all([
+      const [universityResult, courseResult, profileResult, locationResult] = await Promise.all([
         getUniversities(),
         getCourses(),
         getProfile(),
+        getLocations(),
       ]);
       if (cancelled) return;
-      if (isApiError(universityResult) || isApiError(courseResult) || isApiError(profileResult)) {
-        const failure = isApiError(universityResult)
-          ? universityResult
-          : isApiError(courseResult)
-            ? courseResult
-            : profileResult;
-        setLoadError(isApiError(failure) ? failure.error.message : "Could not load the profile form.");
+      if (isApiError(universityResult) || isApiError(courseResult) || isApiError(profileResult) || isApiError(locationResult)) {
+        const failure = [universityResult, courseResult, profileResult, locationResult].find(isApiError);
+        setLoadError(failure && isApiError(failure) ? failure.error.message : "Could not load the profile form.");
         setPhase("error");
         return;
       }
       setUniversities(universityResult.data);
       setCourses(courseResult.data);
-      setForm(
-        profileResult.data
-          ? formFromProfile(profileResult.data)
-          : emptyForm(universityResult.data[0]?.id ?? "", labelForEmail(demo.email) ?? ""),
+      setLocations(locationResult.data);
+      const storedLocation = readPreferredLocationId();
+      setPreferredLocationId(
+        locationResult.data.some((location) => location.id === storedLocation)
+          ? storedLocation ?? ""
+          : locationResult.data[0]?.id ?? "",
       );
+      let displayName = labelForEmail(demo.email) ?? "";
+      if (!profileResult.data) {
+        const supabase = getBrowserSupabase();
+        const user = supabase ? (await supabase.auth.getUser()).data.user : null;
+        const metadataName = user?.user_metadata?.display_name;
+        if (typeof metadataName === "string" && metadataName.trim()) displayName = metadataName.trim();
+      }
+      setForm(profileResult.data ? formFromProfile(profileResult.data) : emptyForm(universityResult.data[0]?.id ?? "", displayName));
       setPhase("ready");
     })();
     return () => {
@@ -143,6 +158,19 @@ export function ProfileForm() {
 
   async function save() {
     if (!form) return;
+    if (setup) {
+      const problems: string[] = [];
+      if (form.displayName.trim().length < 1) problems.push("Enter the name other students should see.");
+      if (form.major.trim().length < 1) problems.push("Enter your major.");
+      if (form.academicYear === "") problems.push("Choose your academic year.");
+      if (form.courseIds.length < 1) problems.push("Choose at least one course.");
+      if (!preferredLocationId) problems.push("Choose a preferred study building.");
+      if (problems.length > 0) {
+        setMessages(problems);
+        setSaved("");
+        return;
+      }
+    }
     setSaving(true);
     setSaved("");
     setMessages([]);
@@ -164,14 +192,23 @@ export function ProfileForm() {
       return;
     }
     setForm(formFromProfile(result.data));
+    if (preferredLocationId) writePreferredLocationId(preferredLocationId);
+    if (setup) {
+      router.push("/home");
+      return;
+    }
     setSaved(result.data.visible ? "Profile saved. You are opted in to discovery." : "Profile saved. Visibility stays off until you opt in.");
   }
 
   return (
     <div className="grid w-full gap-5">
       <PageHeader
-        title="Profile"
-        description="Name, campus, courses, study style, session length, group size, and discovery visibility. These are the fields StudyBuddie stores."
+        title={setup ? "Set up your profile" : "Profile"}
+        description={
+          setup
+            ? "Add your major, year, courses, study style, preferred building, session length, and group size. The building is the one check-in starts with."
+            : "Name, campus, courses, study style, session length, group size, and discovery visibility. These are the fields StudyBuddie stores."
+        }
       />
       <StudyStatsCard variant="full" />
       <form
@@ -285,6 +322,22 @@ export function ProfileForm() {
         </div>
 
         <div className="panel-shadow grid content-start gap-5 rounded-[20px] border border-line bg-surface p-4 sm:p-5">
+        <label className={fieldClass} htmlFor={`${formId}-location`}>
+          Preferred study building
+          <select
+            id={`${formId}-location`}
+            className={inputClass}
+            value={preferredLocationId}
+            onChange={(event) => setPreferredLocationId(event.target.value)}
+          >
+            <option value="">Choose a building</option>
+            {locations.map((location) => (
+              <option key={location.id} value={location.id}>
+                {location.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <fieldset className="grid gap-2">
           <legend className="text-sm font-bold">Study style</legend>
           <div className="flex flex-wrap gap-2">
@@ -360,7 +413,7 @@ export function ProfileForm() {
         </label>
 
         <Button type="submit" disabled={saving} className="w-full sm:w-auto">
-          {saving ? "Saving…" : "Save profile"}
+          {saving ? "Saving…" : setup ? "Save and continue" : "Save profile"}
         </Button>
         </div>
       </form>
