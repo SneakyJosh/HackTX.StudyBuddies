@@ -735,6 +735,19 @@ begin
   if not found or (sr.sender_id <> uid and sr.recipient_id <> uid) then
     raise exception 'NOT_FOUND: request not found' using errcode = 'P0002';
   end if;
+  -- Blocked pairs are invisible, exactly as in list_my_requests and
+  -- discovery: a block must cut off the counterpart's name and current
+  -- building here too. Reported as NOT_FOUND so the response does not
+  -- reveal that the request (or the block) exists. This check stays in
+  -- the function even though direct EXECUTE is revoked below, so the
+  -- protection survives any future grant change.
+  if exists (
+    select 1 from public.blocks b
+    where (b.blocker_id = sr.sender_id and b.blocked_id = sr.recipient_id)
+       or (b.blocker_id = sr.recipient_id and b.blocked_id = sr.sender_id)
+  ) then
+    raise exception 'NOT_FOUND: request not found' using errcode = 'P0002';
+  end if;
   other_id := case when sr.sender_id = uid then sr.recipient_id else sr.sender_id end;
   select * into other from public.profiles where id = other_id;
   if not found then
@@ -953,7 +966,7 @@ revoke all on function public.current_checkin() from public, anon;
 revoke all on function public.checkout_active() from public, anon;
 revoke all on function public.replace_checkin(uuid, uuid, integer, text, text) from public, anon;
 revoke all on function public.discovery_candidates(uuid, uuid) from public, anon;
-revoke all on function public.study_request_payload(uuid) from public, anon;
+revoke all on function public.study_request_payload(uuid) from public, anon, authenticated;
 revoke all on function public.list_my_requests(text) from public, anon;
 revoke all on function public.send_study_request(uuid) from public, anon;
 revoke all on function public.list_my_blocks() from public, anon;
@@ -965,12 +978,16 @@ grant execute on function public.current_checkin() to authenticated;
 grant execute on function public.checkout_active() to authenticated;
 grant execute on function public.replace_checkin(uuid, uuid, integer, text, text) to authenticated;
 grant execute on function public.discovery_candidates(uuid, uuid) to authenticated;
-grant execute on function public.study_request_payload(uuid) to authenticated;
 grant execute on function public.list_my_requests(text) to authenticated;
 grant execute on function public.send_study_request(uuid) to authenticated;
 grant execute on function public.list_my_blocks() to authenticated;
 grant execute on function public.block_user(uuid) to authenticated;
 grant execute on function public.create_report(uuid, text, text) to authenticated;
+
+-- study_request_payload is deliberately NOT granted to any client role:
+-- it is an internal helper called only by the SECURITY DEFINER wrappers
+-- list_my_requests and send_study_request, so authenticated users cannot
+-- call it directly through PostgREST (it also refuses blocked pairs).
 
 -- Trigger functions are deliberately NOT granted to anyone: PostgreSQL
 -- does not require the table-changing user to hold EXECUTE on a trigger

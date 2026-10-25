@@ -114,7 +114,12 @@ export async function transitionRequest(
   if (updated.error) throwMappedDbError(updated.error);
   if (!updated.data) throw conflictError("Request is no longer pending");
 
-  const payload = await supabase.rpc("study_request_payload", { p_request_id: requestId });
-  if (payload.error) throwMappedDbError(payload.error);
-  return parseStudyRequest(payload.data);
+  // study_request_payload is an internal DB helper and is not callable by
+  // clients directly; read the updated row back through the block-filtered
+  // list path instead. A request that went invisible in between (e.g. a
+  // block landed in parallel) is reported as not found.
+  const requests = await listRequests(supabase, "all");
+  const updatedRequest = requests.find((request) => request.id === requestId);
+  if (!updatedRequest) throw notFoundError("Request not found");
+  return updatedRequest;
 }

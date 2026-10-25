@@ -54,6 +54,34 @@ test("discovery scoring stays in the database and returns no private scoring inp
   assert.equal(returnedPayload.includes("'courseIds'"), false);
 });
 
+test("blocked pairs cannot leak counterpart data through study_request_payload", () => {
+  const fn = migration.slice(
+    migration.indexOf("function public.study_request_payload"),
+    migration.indexOf("function public.list_my_requests"),
+  );
+  // Blocked pairs are refused inside the helper itself, indistinguishably
+  // from a missing/non-participant request.
+  assert.match(fn, /from public\.blocks b/);
+  assert.match(fn, /raise exception 'NOT_FOUND: request not found'/);
+  // Least privilege: the helper is internal-only; clients reach request
+  // payloads through list_my_requests / send_study_request, which stay
+  // granted and still call the helper within the definer chain.
+  assert.equal(
+    migration.includes(
+      "grant execute on function public.study_request_payload(uuid) to authenticated",
+    ),
+    false,
+  );
+  assert.match(migration, /revoke all on function public\.study_request_payload\(uuid\) from public, anon, authenticated;/);
+  assert.match(migration, /grant execute on function public\.list_my_requests\(text\) to authenticated;/);
+  assert.match(migration, /grant execute on function public\.send_study_request\(uuid\) to authenticated;/);
+  assert.match(migration, /public\.study_request_payload\(rows\.id\)/);
+  assert.match(migration, /return public\.study_request_payload\(new_id\);/);
+  // Server code must not call the internal helper directly either.
+  const requestsSource = readFileSync("src/server/requests.ts", "utf8");
+  assert.equal(requestsSource.includes('rpc("study_request_payload"'), false);
+});
+
 test("no general-purpose privileged client or service-role credential remains in server code", () => {
   assert.equal(existsSync("src/server/admin.ts"), false);
   assert.equal(existsSync("src/server/public-profiles.ts"), false);

@@ -29,6 +29,11 @@ final public `DiscoveryMatch` fields. Direct table inserts into
 role-checked (recipient accepts/declines, sender cancels) with no
 privileged-caller bypass.
 
+`study_request_payload` is an internal helper only: it is not granted to
+any client role, is called solely by `list_my_requests` and
+`send_study_request` (both stay granted), and refuses blocked pairs, so a
+block cuts off the counterpart's name and current building everywhere.
+
 Deleting a profile cannot erase history: enrollments, check-ins, blocks,
 requests, and reports all reference profiles with `ON DELETE RESTRICT`,
 so account deletion with history requires a controlled admin process
