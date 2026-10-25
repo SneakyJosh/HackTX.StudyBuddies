@@ -417,7 +417,9 @@ test("personal study feedback stays private and does not change minutes or match
   const history = readFileSync("src/components/session-history.tsx", "utf8");
   assert.match(history, /How productive was your study session\?/);
   assert.match(history, /How much did you enjoy this study space\?/);
-  assert.match(history, /How well did you study with/);
+  assert.match(history, /chemistryQuestions\(record\.participants\)/);
+  const questions = readFileSync("src/lib/group-feedback.ts", "utf8");
+  assert.match(questions, /How well did you study with/);
   const feedback = readFileSync("src/components/study-feedback.tsx", "utf8");
   assert.match(feedback, /Focus /);
   assert.match(feedback, /Place /);

@@ -15,6 +15,7 @@ import {
   postMiss,
 } from "@/lib/api-client";
 import { formatCampusTimestamp } from "@/lib/campus-time";
+import { canFinishGroupSession, type GroupSessionRef } from "@/lib/group-feedback";
 import { AVAILABILITY_LABELS, STUDY_STYLE_LABELS, formatTimestamp } from "@/lib/labels";
 import { VALIDATION, type Checkin, type Course, type Location, type ScheduledSession, type StudyRecord } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
@@ -36,7 +37,12 @@ export function SessionsBoard() {
   const [scheduleMessage, setScheduleMessage] = useState<string | null>(null);
   const [focusOpen, setFocusOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [preset, setPreset] = useState<{ courseId: string; locationId: string; durationMinutes: number } | null>(null);
+  const [preset, setPreset] = useState<{
+    courseId: string;
+    locationId: string;
+    durationMinutes: number;
+    groupSession?: GroupSessionRef;
+  } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [asOf, setAsOf] = useState<number | null>(null);
   const [rating, setRating] = useState<StudyRecord | null>(null);
@@ -93,6 +99,14 @@ export function SessionsBoard() {
     };
   }, [demo.ready, demo.userId, demo.revision, reloadKey]);
 
+  useEffect(() => {
+    if (!demo.ready || !demo.userId) return;
+    const tick = () => setAsOf(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [demo.ready, demo.userId]);
+
   if (!demo.ready || phase === "loading") return <LoadingBlock label="Loading sessions" />;
   if (phase === "error") {
     return (
@@ -109,6 +123,13 @@ export function SessionsBoard() {
       courseId: session.course.id,
       locationId: session.location.id,
       durationMinutes: Math.min(VALIDATION.durationMinutes.max, Math.max(VALIDATION.durationMinutes.min, minutes)),
+      groupSession: {
+        id: session.id,
+        myRole: session.myRole,
+        myStatus: session.myStatus,
+        startsAt: session.startsAt,
+        endsAt: session.endsAt,
+      },
     });
     setFocusOpen(true);
   }
@@ -209,7 +230,7 @@ export function SessionsBoard() {
       </section>
       <SessionHistory />
       <ScheduleSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} />
-      <FocusSheet open={focusOpen} preset={preset} onClose={() => setFocusOpen(false)} />
+      <FocusSheet open={focusOpen} preset={preset} onClose={() => setFocusOpen(false)} onGroupFinished={setRating} />
       <RatingSheet record={rating} onClose={() => setRating(null)} />
     </div>
   );
@@ -308,8 +329,6 @@ function SessionCard({
   );
 }
 
-const FINISH_GRACE_MS = 2 * 60 * 60 * 1000;
-
 function AttendanceActions({
   session,
   asOf,
@@ -324,9 +343,19 @@ function AttendanceActions({
   onFinished: (record: StudyRecord) => void;
 }) {
   const [localBusy, setLocalBusy] = useState(false);
+  if (asOf === null) return null;
   const eligible = session.myRole === "host" || session.myStatus === "accepted";
-  const started = asOf !== null && asOf >= new Date(session.startsAt).getTime();
-  const withinGrace = asOf !== null && asOf <= new Date(session.endsAt).getTime() + FINISH_GRACE_MS;
+  const started = asOf >= new Date(session.startsAt).getTime();
+  const withinGrace = canFinishGroupSession(
+    {
+      id: session.id,
+      myRole: session.myRole,
+      myStatus: session.myStatus,
+      startsAt: session.startsAt,
+      endsAt: session.endsAt,
+    },
+    asOf,
+  );
   if (!eligible || !started) return null;
 
   async function run(action: "finish" | "miss") {
@@ -345,7 +374,7 @@ function AttendanceActions({
     <>
       {withinGrace ? (
         <Button disabled={busy || localBusy} onClick={() => void run("finish")}>
-          Finish
+          Finish group session
         </Button>
       ) : null}
       <Button variant="secondary" disabled={busy || localBusy} onClick={() => void run("miss")}>

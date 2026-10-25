@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getCheckinHistory, getStudyRecords, isApiError, postStudyRating } from "@/lib/api-client";
 import { formatCampusTimestamp } from "@/lib/campus-time";
+import { chemistryQuestions } from "@/lib/group-feedback";
 import { STUDY_STYLE_LABELS } from "@/lib/labels";
 import { STREAK_DAY_MINIMUM_MINUTES, STUDY_TIME_MINIMUM_MINUTES } from "@/lib/study-time";
 import type { CheckinStudyRecord, PostStudyRatingBody, StudyRecord } from "@/types/api";
@@ -199,7 +200,7 @@ export function RatingSheet({
   onSaved?: (record: StudyRecord) => void;
 }) {
   return (
-    <Sheet open={record !== null} title="Private feedback" onClose={onClose}>
+    <Sheet open={record !== null} title="Private feedback" onClose={onClose} priority>
       {record ? <RatingForm key={record.id} record={record} onClose={onClose} onSaved={onSaved} /> : null}
     </Sheet>
   );
@@ -263,15 +264,15 @@ function RatingForm({
             locked={record.myRatings.environment !== null}
             onChange={setEnvironment}
           />
-          {record.participants.map((person) => {
-            const existing = record.myRatings.chemistry.find((item) => item.userId === person.id)?.stars ?? null;
+          {chemistryQuestions(record.participants).map((question) => {
+            const existing = record.myRatings.chemistry.find((item) => item.userId === question.userId)?.stars ?? null;
             return (
               <StarPicker
-                key={person.id}
-                label={`How well did you study with ${person.displayName}?`}
-                value={existing ?? chemistry[person.id] ?? null}
+                key={question.userId}
+                label={question.label}
+                value={existing ?? chemistry[question.userId] ?? null}
                 locked={existing !== null}
-                onChange={(stars) => setChemistry((current) => ({ ...current, [person.id]: stars }))}
+                onChange={(stars) => setChemistry((current) => ({ ...current, [question.userId]: stars }))}
               />
             );
           })}

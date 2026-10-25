@@ -141,16 +141,18 @@ export function Sheet({
   open,
   title,
   onClose,
+  priority = false,
   children,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
+  priority?: boolean;
   children: ReactNode;
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center lg:items-center lg:p-6">
+    <div className={cx("fixed inset-0 flex items-end justify-center lg:items-center lg:p-6", priority ? "z-50" : "z-40")}>
       <button type="button" className="absolute inset-0 bg-[rgba(5,5,20,0.55)]" aria-label="Close" onClick={onClose} />
       <div
         role="dialog"

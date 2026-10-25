@@ -9,8 +9,10 @@ import {
   getProfile,
   isApiError,
   postCheckin,
+  postFinish,
   postFinishCheckin,
 } from "@/lib/api-client";
+import { canFinishGroupSession, type GroupSessionRef } from "@/lib/group-feedback";
 import { CHECKIN_FINISH_GRACE_MS } from "@/lib/study-time";
 import { AVAILABILITY_LABELS, AVAILABILITIES, STUDY_STYLE_LABELS, STUDY_STYLES, formatTimestamp } from "@/lib/labels";
 import {
@@ -22,6 +24,7 @@ import {
   type Location,
   type PostCheckinBody,
   type Profile,
+  type StudyRecord,
   type StudyStyle,
 } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
@@ -40,10 +43,12 @@ export function FocusSheet({
   open,
   onClose,
   preset,
+  onGroupFinished,
 }: {
   open: boolean;
   onClose: () => void;
-  preset?: { courseId: string; locationId: string; durationMinutes: number } | null;
+  preset?: { courseId: string; locationId: string; durationMinutes: number; groupSession?: GroupSessionRef } | null;
+  onGroupFinished?: (record: StudyRecord) => void;
 }) {
   const demo = useDemo();
   const formId = useId();
@@ -58,6 +63,8 @@ export function FocusSheet({
   const [saving, setSaving] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupMessage, setGroupMessage] = useState<string | null>(null);
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const [saved, setSaved] = useState<CheckinStudyRecord | null>(null);
   const savedHold = useRef<CheckinStudyRecord | null>(null);
@@ -126,13 +133,14 @@ export function FocusSheet({
     };
   }, [open, demo.ready, demo.userId, demo.revision, preset?.courseId, preset?.locationId, preset?.durationMinutes]);
 
+  const groupSessionId = preset?.groupSession?.id ?? null;
   useEffect(() => {
-    if (!open || !active || saved) return;
+    if (!open || (!active && !saved && !groupSessionId)) return;
     const tick = () => setNow(Date.now());
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [open, active, saved]);
+  }, [open, active, saved, groupSessionId]);
 
   const profileCourses = courses.filter((course) => profile?.courseIds.includes(course.id));
   const activeCourse = courses.find((course) => course.id === active?.courseId);
@@ -141,6 +149,8 @@ export function FocusSheet({
   const remaining = active && now !== null && expiresAtMs !== null ? Math.max(0, expiresAtMs - now) : null;
   const plannedEnded = expiresAtMs !== null && now !== null && now >= expiresAtMs;
   const windowClosed = expiresAtMs !== null && now !== null && now > expiresAtMs + CHECKIN_FINISH_GRACE_MS;
+  const groupSession = preset?.groupSession ?? null;
+  const groupReady = groupSession !== null && now !== null && canFinishGroupSession(groupSession, now);
 
   async function submit() {
     if (!draft) return;
@@ -176,6 +186,19 @@ export function FocusSheet({
     setSaved(result.data);
     setActive(null);
     setConfirmCheckout(false);
+  }
+
+  async function finishGroup() {
+    if (!groupSession || !onGroupFinished) return;
+    setGroupBusy(true);
+    setGroupMessage(null);
+    const result = await postFinish(groupSession.id);
+    setGroupBusy(false);
+    if (isApiError(result)) {
+      setGroupMessage(result.error.message);
+      return;
+    }
+    onGroupFinished(result.data);
   }
 
   async function checkoutWithoutSaving() {
@@ -218,6 +241,7 @@ export function FocusSheet({
                 : "Home, Profile, and History now include this personal study session."}
             </p>
           </div>
+          <GroupSessionFinish ready={groupReady} busy={groupBusy} message={groupMessage} onFinish={() => void finishGroup()} />
           <CheckinFeedback
             key={saved.checkinId}
             record={saved}
@@ -259,6 +283,7 @@ export function FocusSheet({
             </p>
           )}
           <FieldError messages={messages} />
+          <GroupSessionFinish ready={groupReady} busy={groupBusy} message={groupMessage} onFinish={() => void finishGroup()} />
           {confirmCheckout ? (
             <div className="grid w-full gap-3 rounded-[14px] bg-surface-muted p-4 text-left">
               <p className="text-sm leading-6">
@@ -378,12 +403,46 @@ export function FocusSheet({
             </div>
           </fieldset>
           <FieldError messages={messages} />
+          <GroupSessionFinish ready={groupReady} busy={groupBusy} message={groupMessage} onFinish={() => void finishGroup()} />
           <Button type="submit" disabled={!profile.visible || profileCourses.length === 0 || saving}>
             {saving ? "Starting…" : `Start ${draft.durationMinutes} min session`}
           </Button>
         </form>
       ) : null}
     </Sheet>
+  );
+}
+
+function GroupSessionFinish({
+  ready,
+  busy,
+  message,
+  onFinish,
+}: {
+  ready: boolean;
+  busy: boolean;
+  message: string | null;
+  onFinish: () => void;
+}) {
+  if (!ready && message === null) return null;
+  return (
+    <div className="grid w-full gap-2 text-left">
+      {ready ? (
+        <>
+          <p className="text-sm leading-6 text-muted">
+            This timer is a personal check-in and has no partner roster. Finish the group session for your own private survey, including each accepted partner by name. Skipping either survey leaves saved minutes and completion unchanged.
+          </p>
+          <Button disabled={busy} onClick={onFinish}>
+            {busy ? "Finishing…" : "Finish group session"}
+          </Button>
+        </>
+      ) : null}
+      {message ? (
+        <p role="alert" className="text-sm text-danger">
+          {message}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
