@@ -1,6 +1,7 @@
 "use client";
 
 import { DiscoveryFeed } from "@/components/discovery-feed";
+import { OpenSessions } from "@/components/open-sessions";
 import { RequestList } from "@/components/request-list";
 import { PageHeader } from "@/components/ui";
 
@@ -15,6 +16,7 @@ export function ConnectBoard() {
         <DiscoveryFeed embedded />
         <RequestList embedded />
       </div>
+      <OpenSessions />
     </div>
   );
 }

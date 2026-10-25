@@ -36,7 +36,15 @@ export const VALIDATION = {
   preferredGroupSize: { min: 1, max: 6 },
   courseQuery: { max: 40 },
   reportDetails: { max: 500 },
+  sessionTitle: { min: 1, max: 60 },
+  sessionSeatLimit: { min: 1, max: 6 },
+  sessionGroupSeatLimit: { min: 2, max: 6 },
+  sessionHorizonDays: 180,
+  sessionMinuteStep: 5,
 } as const;
+
+/** Wall-clock zone for scheduled sessions. Stored instants are UTC. */
+export const CAMPUS_TIME_ZONE = "America/Chicago";
 
 /**
  * Added only while ordering discovery results. Never add this into
@@ -80,6 +88,17 @@ export type AcademicYear =
   | "other";
 export type ReportReason = "harassment" | "spam" | "other";
 export type RequestDirection = "incoming" | "outgoing" | "all";
+export type SessionVisibility = "solo" | "open" | "invite_only";
+export type SessionStatus = "scheduled" | "cancelled";
+export type SessionParticipantStatus =
+  | "invited"
+  | "requested"
+  | "accepted"
+  | "declined"
+  | "left"
+  | "cancelled";
+export type SessionRole = "host" | "invitee" | "joiner";
+export type SessionWhen = "upcoming" | "past";
 
 export type University = {
   id: string;
@@ -172,6 +191,58 @@ export type StudyRequest = {
   location: PublicLocation | null;
 };
 
+export type SessionPerson = {
+  id: string;
+  displayName: string;
+  major: string | null;
+  academicYear: AcademicYear | null;
+};
+
+export type SessionParticipant = {
+  user: SessionPerson;
+  role: SessionRole;
+  status: SessionParticipantStatus;
+};
+
+/**
+ * A booking. `status` stays `scheduled` after `endsAt` passes.
+ * Milestone 9 does not mark a booking completed and does not record study hours.
+ */
+export type ScheduledSession = {
+  id: string;
+  title: string;
+  course: Course;
+  location: PublicLocation;
+  visibility: SessionVisibility;
+  seatLimit: number;
+  /** Accepted participants, including the host. */
+  seatsTaken: number;
+  /** Accepted participants plus pending invitations. Join requests are excluded. */
+  seatsReserved: number;
+  startsAt: string;
+  endsAt: string;
+  status: SessionStatus;
+  host: SessionPerson;
+  myRole: SessionRole | null;
+  myStatus: SessionParticipantStatus | null;
+  participants: SessionParticipant[];
+};
+
+/** Public card for an open booking. No roster and no private schedule. */
+export type OpenSession = {
+  id: string;
+  title: string;
+  course: Course;
+  location: PublicLocation;
+  seatLimit: number;
+  seatsTaken: number;
+  seatsReserved: number;
+  startsAt: string;
+  endsAt: string;
+  host: SessionPerson;
+  myStatus: SessionParticipantStatus | null;
+};
+
 export type Block = {
   blockedUserId: string;
   displayName: string | null;
@@ -206,6 +277,26 @@ export type PatchRequestBody = {
 };
 
 export type PostBlockBody = { blockedUserId: string };
+
+export type PostSessionBody = {
+  title: string;
+  courseId: string;
+  locationId: string;
+  /** Campus calendar date, `YYYY-MM-DD`, interpreted in America/Chicago. */
+  localDate: string;
+  /** Campus time, `HH:MM` on a 5-minute grid, interpreted in America/Chicago. */
+  localTime: string;
+  durationMinutes: number;
+  visibility: SessionVisibility;
+  seatLimit: number;
+  inviteeIds: string[];
+};
+
+export type PostInvitationBody = { inviteeId: string };
+
+export type PatchInvitationBody = { status: "accepted" | "declined" };
+
+export type PatchSessionParticipantBody = { status: "accepted" | "declined" };
 
 export type PostReportBody = {
   reportedUserId: string;

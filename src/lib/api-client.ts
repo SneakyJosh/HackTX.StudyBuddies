@@ -15,6 +15,13 @@ import type {
   Profile,
   PutProfileBody,
   RequestDirection,
+  OpenSession,
+  PatchInvitationBody,
+  PatchSessionParticipantBody,
+  PostInvitationBody,
+  PostSessionBody,
+  ScheduledSession,
+  SessionWhen,
   StudyRequest,
   University,
 } from "@/types/api";
@@ -140,6 +147,77 @@ export async function getRequests(
 
 export async function postRequest(body: PostRequestBody): Promise<ApiData<StudyRequest> | ApiError> {
   return publishWrite(await request<ApiData<StudyRequest>>("/api/requests", { method: "POST", body }));
+}
+
+export async function getSessions(when: SessionWhen = "upcoming"): Promise<ApiList<ScheduledSession> | ApiError> {
+  return request<ApiList<ScheduledSession>>(`/api/sessions?when=${when}`);
+}
+
+export async function getOpenSessions(filters: { courseId?: string; today?: boolean } = {}): Promise<ApiList<OpenSession> | ApiError> {
+  const params = new URLSearchParams();
+  if (filters.courseId) params.set("courseId", filters.courseId);
+  if (filters.today) params.set("today", "true");
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<ApiList<OpenSession>>(`/api/sessions/open${suffix}`);
+}
+
+export async function postSession(body: PostSessionBody): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(await request<ApiData<ScheduledSession>>("/api/sessions", { method: "POST", body }));
+}
+
+export async function postInvitation(
+  sessionId: string,
+  body: PostInvitationBody,
+): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(
+    await request<ApiData<ScheduledSession>>(`/api/sessions/${encodeURIComponent(sessionId)}/invitations`, {
+      method: "POST",
+      body,
+    }),
+  );
+}
+
+export async function patchInvitation(
+  sessionId: string,
+  body: PatchInvitationBody,
+): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(
+    await request<ApiData<ScheduledSession>>(`/api/sessions/${encodeURIComponent(sessionId)}/invitations`, {
+      method: "PATCH",
+      body,
+    }),
+  );
+}
+
+export async function postJoin(sessionId: string): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(
+    await request<ApiData<ScheduledSession>>(`/api/sessions/${encodeURIComponent(sessionId)}/join`, { method: "POST" }),
+  );
+}
+
+export async function patchSessionParticipant(
+  sessionId: string,
+  userId: string,
+  body: PatchSessionParticipantBody,
+): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(
+    await request<ApiData<ScheduledSession>>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/participants/${encodeURIComponent(userId)}`,
+      { method: "PATCH", body },
+    ),
+  );
+}
+
+export async function postLeave(sessionId: string): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(
+    await request<ApiData<ScheduledSession>>(`/api/sessions/${encodeURIComponent(sessionId)}/leave`, { method: "POST" }),
+  );
+}
+
+export async function postCancelSession(sessionId: string): Promise<ApiData<ScheduledSession> | ApiError> {
+  return publishWrite(
+    await request<ApiData<ScheduledSession>>(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: "POST" }),
+  );
 }
 
 export async function patchRequest(

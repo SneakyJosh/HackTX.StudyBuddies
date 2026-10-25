@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCheckin, getCourses, getLocations, getProfile, isApiError } from "@/lib/api-client";
+import { getCheckin, getCourses, getLocations, getProfile, getSessions, isApiError } from "@/lib/api-client";
+import { formatCampusTimestamp } from "@/lib/campus-time";
 import { AVAILABILITY_LABELS, formatTimestamp, initials } from "@/lib/labels";
-import type { Checkin, Course, Location, Profile } from "@/types/api";
+import type { Checkin, Course, Location, Profile, ScheduledSession } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { FocusSheet } from "@/components/focus-sheet";
 import { Button, EmptyBlock, ErrorBlock, LinkButton, LoadingBlock, cardClass } from "@/components/ui";
@@ -17,6 +18,7 @@ export function HomeDashboard() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [checkin, setCheckin] = useState<Checkin | null>(null);
+  const [nextSession, setNextSession] = useState<ScheduledSession | null>(null);
   const [focusOpen, setFocusOpen] = useState(false);
 
   useEffect(() => {
@@ -24,11 +26,12 @@ export function HomeDashboard() {
     let cancelled = false;
     void (async () => {
       setPhase("loading");
-      const [profileResult, courseResult, locationResult, checkinResult] = await Promise.all([
+      const [profileResult, courseResult, locationResult, checkinResult, sessionResult] = await Promise.all([
         getProfile(),
         getCourses(),
         getLocations(),
         getCheckin(),
+        getSessions("upcoming"),
       ]);
       if (cancelled) return;
       const failure = [profileResult, courseResult, locationResult, checkinResult].find(isApiError);
@@ -44,6 +47,11 @@ export function HomeDashboard() {
       setCourses(courseResult.data);
       setLocations(locationResult.data);
       setCheckin(checkinResult.data);
+      setNextSession(
+        isApiError(sessionResult)
+          ? null
+          : sessionResult.data.find((session) => session.myRole === "host" || session.myStatus === "accepted") ?? null,
+      );
       setPhase("ready");
     })();
     return () => {
@@ -102,6 +110,20 @@ export function HomeDashboard() {
             Sessions
           </LinkButton>
         </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+        {nextSession ? (
+          <article className={cardClass}>
+            <h3 className="font-display text-xl font-bold">{nextSession.title}</h3>
+            <p className="mt-1 text-sm">
+              {nextSession.course.code} · {nextSession.course.title}
+            </p>
+            <p className="mt-1 text-sm text-muted">{formatCampusTimestamp(nextSession.startsAt)}</p>
+            <p className="mt-1 text-sm">{nextSession.location.name}</p>
+            <p className="mt-2 text-sm text-muted">
+              {nextSession.seatsReserved} of {nextSession.seatLimit} seats reserved
+            </p>
+          </article>
+        ) : null}
         {checkin ? (
           <article className={cardClass}>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -120,12 +142,14 @@ export function HomeDashboard() {
               <p className="mt-3 text-sm leading-6 text-muted">Other students on campus can see this public building.</p>
             )}
           </article>
-        ) : (
+        ) : null}
+        </div>
+        {!checkin && !nextSession ? (
           <EmptyBlock
-            title="No active check-in"
-            body="Upcoming scheduled sessions are not part of StudySync yet. Start a check-in when you are at a public building."
+            title="Nothing scheduled"
+            body="Create a booking on Sessions, or start a check-in when you are at a public building."
           />
-        )}
+        ) : null}
       </section>
 
       <section>

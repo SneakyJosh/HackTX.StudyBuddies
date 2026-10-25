@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { getCheckin, getRequests, isApiError } from "@/lib/api-client";
+import { getCheckin, getRequests, getSessions, isApiError } from "@/lib/api-client";
 import { formatTimestamp } from "@/lib/labels";
 import { labelForEmail, signOut } from "@/lib/session";
 import { BrandMark } from "@/components/brand-mark";
@@ -70,6 +70,7 @@ function SignedInShell({
   const router = useRouter();
   const accountLabel = labelForEmail(email) ?? email ?? "Signed in";
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [sessionAlerts, setSessionAlerts] = useState<number | null>(null);
   const [studyingUntil, setStudyingUntil] = useState<string | null>(null);
   const currentTab = TABS.find((tab) => tab.href === pathname);
 
@@ -78,6 +79,22 @@ function SignedInShell({
     void getRequests("all").then((result) => {
       if (cancelled || isApiError(result)) return;
       setPendingCount(result.data.filter((request) => request.status === "pending").length);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, revision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getSessions("upcoming").then((result) => {
+      if (cancelled || isApiError(result)) return;
+      setSessionAlerts(
+        result.data.filter((session) => {
+          if (session.myStatus === "invited") return true;
+          return session.myRole === "host" && session.participants.some((person) => person.status === "requested");
+        }).length,
+      );
     });
     return () => {
       cancelled = true;
@@ -119,7 +136,7 @@ function SignedInShell({
                     label={tab.label}
                     icon={tab.icon}
                     current={pathname === tab.href}
-                    pendingCount={tab.href === "/connect" ? pendingCount : null}
+                    pendingCount={tab.href === "/connect" ? pendingCount : tab.href === "/sessions" ? sessionAlerts : null}
                     layout="sidebar"
                   />
                 </li>
@@ -177,7 +194,7 @@ function SignedInShell({
                 label={tab.label}
                 icon={tab.icon}
                 current={pathname === tab.href}
-                pendingCount={tab.href === "/connect" ? pendingCount : null}
+                pendingCount={tab.href === "/connect" ? pendingCount : tab.href === "/sessions" ? sessionAlerts : null}
                 layout="tabs"
               />
             </li>

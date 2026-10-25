@@ -32,7 +32,15 @@ type Draft = {
   studyStyle: StudyStyle;
 };
 
-export function FocusSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function FocusSheet({
+  open,
+  onClose,
+  preset,
+}: {
+  open: boolean;
+  onClose: () => void;
+  preset?: { courseId: string; locationId: string; durationMinutes: number } | null;
+}) {
   const demo = useDemo();
   const formId = useId();
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
@@ -74,10 +82,16 @@ export function FocusSheet({ open, onClose }: { open: boolean; onClose: () => vo
       setCourses(courseResult.data);
       setLocations(locationResult.data);
       setActive(checkinResult.data);
+      const presetCourse = preset?.courseId && profileCourses.some((course) => course.id === preset.courseId)
+        ? preset.courseId
+        : profileCourses[0]?.id ?? "";
+      const presetLocation = preset?.locationId && locationResult.data.some((location) => location.id === preset.locationId)
+        ? preset.locationId
+        : locationResult.data[0]?.id ?? "";
       setDraft({
-        courseId: profileCourses[0]?.id ?? "",
-        locationId: locationResult.data[0]?.id ?? "",
-        durationMinutes: nextProfile?.preferredDurationMinutes ?? VALIDATION.durationMinutes.min,
+        courseId: presetCourse,
+        locationId: presetLocation,
+        durationMinutes: preset?.durationMinutes ?? nextProfile?.preferredDurationMinutes ?? VALIDATION.durationMinutes.min,
         availability: "available",
         studyStyle: nextProfile?.studyStyle ?? "collaborative",
       });
@@ -86,7 +100,7 @@ export function FocusSheet({ open, onClose }: { open: boolean; onClose: () => vo
     return () => {
       cancelled = true;
     };
-  }, [open, demo.ready, demo.userId, demo.revision]);
+  }, [open, demo.ready, demo.userId, demo.revision, preset?.courseId, preset?.locationId, preset?.durationMinutes]);
 
   useEffect(() => {
     if (!open || !active) return;

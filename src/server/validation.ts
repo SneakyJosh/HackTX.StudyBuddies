@@ -1,14 +1,21 @@
+import { CAMPUS_TIME_MESSAGES, resolveCampusStart } from "../lib/campus-time.ts";
 import {
   VALIDATION,
   type AcademicYear,
   type Availability,
+  type PatchInvitationBody,
+  type PatchSessionParticipantBody,
   type PostBlockBody,
   type PostCheckinBody,
+  type PostInvitationBody,
   type PostReportBody,
   type PostRequestBody,
+  type PostSessionBody,
   type PutProfileBody,
   type ReportReason,
   type RequestDirection,
+  type SessionVisibility,
+  type SessionWhen,
   type StudyStyle,
 } from "#api";
 
@@ -28,6 +35,9 @@ const ACADEMIC_YEARS = ["freshman", "sophomore", "junior", "senior", "graduate",
 const REPORT_REASONS = ["harassment", "spam", "other"] as const satisfies readonly ReportReason[];
 const PATCH_STATUSES = ["accepted", "declined", "cancelled"] as const;
 const DIRECTIONS = ["incoming", "outgoing", "all"] as const satisfies readonly RequestDirection[];
+const SESSION_VISIBILITIES = ["solo", "open", "invite_only"] as const satisfies readonly SessionVisibility[];
+const SESSION_WHENS = ["upcoming", "past"] as const satisfies readonly SessionWhen[];
+const INVITE_RESPONSES = ["accepted", "declined"] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -340,6 +350,150 @@ export function parsePostBlockBody(body: Record<string, unknown>, callerId: stri
   }
   fail(details);
   return { blockedUserId: blockedUserId as string };
+}
+
+export function parseSessionWhen(searchParams: URLSearchParams): SessionWhen {
+  rejectSearchParams(searchParams, ["when"]);
+  const raw = searchParams.get("when");
+  if (raw === null) return "upcoming";
+  if (!SESSION_WHENS.includes(raw as SessionWhen)) {
+    throw new ContractValidationError("Validation failed", { when: "when is invalid" });
+  }
+  return raw as SessionWhen;
+}
+
+export function parseOpenSessionQuery(searchParams: URLSearchParams): { courseId: string | null; today: boolean } {
+  rejectSearchParams(searchParams, ["courseId", "today"]);
+  const details: Record<string, string> = {};
+  const courseRaw = searchParams.get("courseId");
+  const courseId = courseRaw === null ? null : parseUuid(courseRaw, "courseId", details);
+  const todayRaw = searchParams.get("today");
+  let today = false;
+  if (todayRaw !== null && todayRaw !== "true") {
+    details.today = "today must be true";
+  } else {
+    today = todayRaw === "true";
+  }
+  fail(details);
+  return { courseId, today };
+}
+
+export function parsePostSessionBody(body: Record<string, unknown>, callerId: string, now = new Date()): PostSessionBody {
+  const details = unknownFields(body, [
+    "title",
+    "courseId",
+    "locationId",
+    "localDate",
+    "localTime",
+    "durationMinutes",
+    "visibility",
+    "seatLimit",
+    "inviteeIds",
+  ]);
+  for (const key of ["title", "courseId", "locationId", "localDate", "localTime", "durationMinutes", "visibility", "seatLimit", "inviteeIds"]) {
+    requirePresent(body, key, details);
+  }
+  let title = "";
+  if (typeof body.title === "string") {
+    title = body.title.trim();
+    if (title.length < VALIDATION.sessionTitle.min || title.length > VALIDATION.sessionTitle.max || /[<>]/.test(title)) {
+      details.title = "title must be 1 to 60 characters without < or >";
+    }
+  } else if (Object.prototype.hasOwnProperty.call(body, "title")) {
+    details.title = "title must be a string";
+  }
+  const courseId = Object.prototype.hasOwnProperty.call(body, "courseId")
+    ? parseUuid(body.courseId, "courseId", details)
+    : null;
+  const locationId = Object.prototype.hasOwnProperty.call(body, "locationId")
+    ? parseUuid(body.locationId, "locationId", details)
+    : null;
+  const durationMinutes = Object.prototype.hasOwnProperty.call(body, "durationMinutes")
+    ? parseInteger(body.durationMinutes, "durationMinutes", VALIDATION.durationMinutes.min, VALIDATION.durationMinutes.max, details)
+    : null;
+  const visibility = Object.prototype.hasOwnProperty.call(body, "visibility")
+    ? parseEnum(body.visibility, "visibility", SESSION_VISIBILITIES, details)
+    : null;
+  const seatLimit = Object.prototype.hasOwnProperty.call(body, "seatLimit")
+    ? parseInteger(body.seatLimit, "seatLimit", VALIDATION.sessionSeatLimit.min, VALIDATION.sessionSeatLimit.max, details)
+    : null;
+  const localDate = typeof body.localDate === "string" ? body.localDate : "";
+  const localTime = typeof body.localTime === "string" ? body.localTime : "";
+  if (Object.prototype.hasOwnProperty.call(body, "localDate") && typeof body.localDate !== "string") {
+    details.localDate = "localDate must be a string";
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "localTime") && typeof body.localTime !== "string") {
+    details.localTime = "localTime must be a string";
+  }
+  if (typeof body.localDate === "string" && typeof body.localTime === "string") {
+    const resolved = resolveCampusStart(localDate, localTime, now);
+    if (!resolved.ok) {
+      const field = resolved.reason === "invalid-date" ? "localDate" : "localTime";
+      details[field] = CAMPUS_TIME_MESSAGES[resolved.reason];
+    }
+  }
+  let inviteeIds: string[] = [];
+  if (Object.prototype.hasOwnProperty.call(body, "inviteeIds")) {
+    if (!Array.isArray(body.inviteeIds)) {
+      details.inviteeIds = "inviteeIds must be an array of UUIDs";
+    } else {
+      const seen = new Set<string>();
+      inviteeIds = body.inviteeIds.flatMap((value) => {
+        const parsed = parseUuid(value, "inviteeIds", details);
+        if (!parsed) return [];
+        if (sameUser(parsed, callerId)) details.inviteeIds = "Cannot invite yourself";
+        if (seen.has(parsed)) details.inviteeIds = "inviteeIds must be unique";
+        seen.add(parsed);
+        return [parsed];
+      });
+    }
+  }
+  if (visibility === "solo" && (seatLimit !== 1 || inviteeIds.length > 0)) {
+    details.seatLimit = "A solo session has one seat and no invites";
+  }
+  if (visibility && visibility !== "solo" && seatLimit !== null && (seatLimit < 2 || inviteeIds.length > seatLimit - 1)) {
+    details.seatLimit = "Leave a seat for yourself and stay within 2 to 6 seats";
+  }
+  if (visibility === "invite_only" && inviteeIds.length < 1) {
+    details.inviteeIds = "Invite at least one study partner";
+  }
+  fail(details);
+  return {
+    title,
+    courseId: courseId as string,
+    locationId: locationId as string,
+    localDate,
+    localTime,
+    durationMinutes: durationMinutes as number,
+    visibility: visibility as SessionVisibility,
+    seatLimit: seatLimit as number,
+    inviteeIds,
+  };
+}
+
+export function parsePostInvitationBody(body: Record<string, unknown>, callerId: string): PostInvitationBody {
+  const details = unknownFields(body, ["inviteeId"]);
+  requirePresent(body, "inviteeId", details);
+  const inviteeId = Object.prototype.hasOwnProperty.call(body, "inviteeId")
+    ? parseUuid(body.inviteeId, "inviteeId", details)
+    : null;
+  if (inviteeId && sameUser(inviteeId, callerId)) details.inviteeId = "Cannot invite yourself";
+  fail(details);
+  return { inviteeId: inviteeId as string };
+}
+
+export function parsePatchInvitationBody(body: Record<string, unknown>): PatchInvitationBody {
+  const details = unknownFields(body, ["status"]);
+  requirePresent(body, "status", details);
+  const status = Object.prototype.hasOwnProperty.call(body, "status")
+    ? parseEnum(body.status, "status", INVITE_RESPONSES, details)
+    : null;
+  fail(details);
+  return { status: status as "accepted" | "declined" };
+}
+
+export function parsePatchSessionParticipantBody(body: Record<string, unknown>): PatchSessionParticipantBody {
+  return parsePatchInvitationBody(body);
 }
 
 export function parsePostReportBody(body: Record<string, unknown>, callerId: string): PostReportBody {

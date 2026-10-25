@@ -13,6 +13,8 @@ const shellScreens = [
   "src/components/connect-board.tsx",
   "src/components/sessions-board.tsx",
   "src/components/focus-sheet.tsx",
+  "src/components/schedule-sheet.tsx",
+  "src/components/open-sessions.tsx",
 ];
 
 test("BrandMark is exported from its own module and imported by name", () => {

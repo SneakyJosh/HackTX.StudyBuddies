@@ -112,6 +112,7 @@ test("no general-purpose privileged client or service-role credential remains in
   for (const file of [
     "src/server/discovery.ts",
     "src/server/requests.ts",
+    "src/server/sessions.ts",
     "src/server/supabase.ts",
     "src/server/auth.ts",
   ]) {
@@ -122,7 +123,7 @@ test("no general-purpose privileged client or service-role credential remains in
 });
 
 test("privileged read paths carry the server-only build guard", () => {
-  for (const file of ["src/server/discovery.ts", "src/server/requests.ts"]) {
+  for (const file of ["src/server/discovery.ts", "src/server/requests.ts", "src/server/sessions.ts"]) {
     const source = readFileSync(file, "utf8");
     assert.match(source, /^import "server-only";/m, `${file} must import server-only first`);
   }
@@ -179,4 +180,27 @@ test("the dev auth test page drives the full two-student workflow and negative c
   // It must stay read-safe: no destructive verbs beyond the contract's own
   // check-out / unblock / transitions, and no report creation is needed.
   assert.equal(client.includes("/api/reports"), false);
+});
+
+test("scheduled sessions stay private and do not complete themselves", () => {
+  const migration = readFileSync("supabase/migrations/0003_study_sessions.sql", "utf8");
+  assert.match(migration, /status in \('scheduled', 'cancelled'\)/);
+  assert.equal(migration.includes("'completed'"), false);
+  assert.match(migration, /'requested'/);
+  assert.match(migration, /status in \('accepted', 'invited'\)/);
+  assert.match(migration, /exclude using gist/);
+  assert.match(migration, /America\/Chicago/);
+  assert.match(migration, /ambiguous in America\/Chicago/);
+  assert.match(migration, /does not exist in America\/Chicago/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /delete from public\.study_session_commitments where session_id = s\.id/);
+  assert.match(migration, /apply_block_to_study_sessions/);
+  assert.equal(
+    migration.includes("grant execute on function public.study_session_payload(uuid) to authenticated"),
+    false,
+  );
+  assert.equal(migration.includes("discovery_candidates"), false);
+  const scoring = readFileSync("supabase/migrations/0001_studysync.sql", "utf8");
+  assert.equal(readFileSync("supabase/migrations/0002_fix_pair_lock_least_greatest.sql", "utf8").includes("study_sessions"), false);
+  assert.match(scoring, /function public\.discovery_candidates/);
 });

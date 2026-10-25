@@ -62,6 +62,7 @@ export function throwMappedDbError(error: { code?: string; message?: string }): 
   if (error.code === "P0001") throw new ApiError("CONFLICT", "Conflict");
   if (error.code === "P0002") throw new ApiError("NOT_FOUND", "Not found");
   if (error.code === "28000") throw new ApiError("UNAUTHENTICATED", "Authentication required");
+  if (error.code === "23P01") throw new ApiError("CONFLICT", "That time overlaps another session");
   if (error.code === "23505") {
     throw new ApiError("CONFLICT", "A pending or accepted request already exists");
   }

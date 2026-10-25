@@ -251,5 +251,90 @@ Use `@supabase/ssr` for Next.js cookie sessions. Verify the user on the server w
 
 Supabase package versions are pinned when backend implementation starts. The contract freeze does not add runtime dependencies.
 
+## Scheduled sessions (Milestone 9)
+
+Scheduled sessions are bookings. They are not check-ins, discovery matches, or completed study history. A booking whose `endsAt` is in the past stays `scheduled`. This milestone does not write a `completed` status and does not count hours or streaks. Completion belongs to a later milestone.
+
+Campus wall-clock times use `America/Chicago`. Clients send `localDate` (`YYYY-MM-DD`) and `localTime` (`HH:MM`). The server resolves exactly one UTC instant. A spring-forward gap has no valid instant and is `400`. A fall-back hour that matches two instants is `400`. The server does not shift the clock or pick the earlier or later offset. Stored and returned timestamps are ISO 8601 UTC. Responses label no zone of their own. The website formats them in `America/Chicago`.
+
+`seatsTaken` counts participants with status `accepted`, including the host. `seatsReserved` counts `accepted` plus `invited`. Status `requested` is an Open-session join request and does not reserve a seat. The host's accept rechecks `seatsReserved` inside the locked transaction before anyone new becomes `accepted`.
+
+### Types
+```ts
+type SessionVisibility = 'solo' | 'open' | 'invite_only';
+type SessionStatus = 'scheduled' | 'cancelled';
+type SessionParticipantStatus = 'invited' | 'requested' | 'accepted' | 'declined' | 'left' | 'cancelled';
+type SessionRole = 'host' | 'invitee' | 'joiner';
+type SessionWhen = 'upcoming' | 'past';
+type SessionPerson = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null };
+type SessionParticipant = { user: SessionPerson; role: SessionRole; status: SessionParticipantStatus };
+type ScheduledSession = {
+  id: string; title: string; course: Course; location: PublicLocation;
+  visibility: SessionVisibility; seatLimit: number; seatsTaken: number; seatsReserved: number;
+  startsAt: string; endsAt: string; status: SessionStatus; host: SessionPerson;
+  myRole: SessionRole | null; myStatus: SessionParticipantStatus | null;
+  participants: SessionParticipant[];
+};
+type OpenSession = {
+  id: string; title: string; course: Course; location: PublicLocation;
+  seatLimit: number; seatsTaken: number; seatsReserved: number;
+  startsAt: string; endsAt: string; host: SessionPerson;
+  myStatus: SessionParticipantStatus | null;
+};
+```
+
+`location` is the public building only. Person objects are display name, major, and year. No email, GPS, room, desk, or private calendar.
+
+### Validation
+| Field | Rule |
+|---|---|
+| `title` | Trimmed length 1–60. `<` and `>` are rejected |
+| `localDate` | Real calendar date |
+| `localTime` | `HH:MM`, minute multiple of 5, one America/Chicago instant |
+| `durationMinutes` | Integer 30–180 |
+| `startsAt` | After server time and at most 180 days ahead |
+| `visibility` | `solo`, `open`, or `invite_only` |
+| `seatLimit` | `solo` is 1. Open and invite-only are 2–6, including the host |
+| `inviteeIds` | Unique UUIDs. Empty for solo. At least one for invite-only. Cannot exceed the seats left after the host |
+
+Overlap uses a half-open range `[startsAt, endsAt)` across sessions the user hosts or has accepted. A session that starts when another ends is allowed. Pending invitations and join requests do not create a commitment.
+
+### Endpoints
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/sessions?when=upcoming\|past` | Bookings the caller hosts or is invited to |
+| POST | `/api/sessions` | Create a booking. `201` |
+| GET | `/api/sessions/open?courseId=&today=true` | Upcoming open bookings on the caller's campus |
+| GET | `/api/sessions/:id` | One booking the caller may see |
+| POST | `/api/sessions/:id/invitations` | Host invites one accepted study partner |
+| PATCH | `/api/sessions/:id/invitations` | Invitee accepts or declines |
+| POST | `/api/sessions/:id/join` | Request a seat on an open booking. `201`. Status becomes `requested` |
+| PATCH | `/api/sessions/:id/participants/:userId` | Host accepts or declines a join request |
+| POST | `/api/sessions/:id/leave` | Accepted non-host leaves |
+| POST | `/api/sessions/:id/cancel` | Host cancels. Idempotent |
+
+`when=upcoming` is `scheduled`, `endsAt` still in the future, and the caller's status is `invited`, `requested`, or `accepted`. `when=past` is `scheduled`, `endsAt` has passed, and the caller is the host or `accepted`. Cancelled bookings appear in neither list. Past rows are elapsed bookings, not completed study sessions.
+
+Create body: `{ "title", "courseId", "locationId", "localDate", "localTime", "durationMinutes", "visibility", "seatLimit", "inviteeIds" }`. The course must be on the host's profile. The building must belong to the host's university. Invitees must be other students on that campus with an accepted study request and no block in either direction.
+
+### Roster visibility
+- The host sees every participant row and status.
+- An `accepted`, `invited`, or `requested` caller sees accepted participants, plus their own row. They do not see other pending invitations or other join requests.
+- A caller with no participant row sees an open, upcoming, same-campus booking with `participants: []`. Solo and invite-only bookings are `404` to everyone else.
+- A block in either direction with the host makes the booking `404`, including open bookings.
+- A block between two non-host participants omits each of them from the other's roster. Seat counts stay numeric and do not name the hidden person.
+
+### Capacity and cancellation
+Accepting a join request locks the booking, recounts `accepted` and `invited` rows, and inserts the commitment only when `seatsReserved` is still below `seatLimit`. A full booking is `409`. Declining a join request sets `declined` and does not change seats. Declining an invitation sets `declined` and releases the reserved seat. Leaving sets `left` and deletes that person's commitment. The host cannot leave.
+
+Cancellation is host-only. It sets the booking to `cancelled`, deletes every commitment for that booking, and sets `invited`, `requested`, and `accepted` participant rows to `cancelled`. `declined` and `left` stay as they are. A second cancel returns the same cancelled booking. Cancelled bookings are absent from upcoming and past lists.
+
+### Blocks
+Blocking still cancels pending study requests. It also cancels `invited` and `requested` session rows between the pair, removes an `accepted` non-host from the other's upcoming booking, and deletes that person's commitment. The host's booking continues for everyone else. Unblocking does not restore the seat.
+
+Changing university while the caller hosts a future `scheduled` booking, or has an `accepted` seat on one, is `409`.
+
+Check-ins, discovery, matching, and study requests are unchanged. A booking does not check a student in. Focused check-ins stay out of discovery.
+
 ## Contract change procedure
 Cursor owns edits to this file and to `src/types/api.ts`. Any agent requesting a change must specify the affected endpoint or type, migration impact, UI impact, and compatibility strategy. Freeze the update and sync it to both worktrees before dependent code changes.
