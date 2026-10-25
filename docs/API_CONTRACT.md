@@ -320,7 +320,7 @@ Create body: `{ "title", "courseId", "locationId", "localDate", "localTime", "du
 ### Roster visibility
 - The host sees every participant row and status.
 - An `accepted`, `invited`, or `requested` caller sees accepted participants, plus their own row. They do not see other pending invitations or other join requests.
-- A caller with no participant row sees an open, upcoming, same-campus booking with `participants: []`. Solo and invite-only bookings are `404` to everyone else.
+- A caller with no active row (`invited`, `requested`, or `accepted`) sees an open, upcoming, same-campus booking with `participants: []`. Solo, invite-only, cancelled, and elapsed private bookings are `404`. `declined`, `left`, and `cancelled` do not keep access. Decline and leave still return that booking once so the action can succeed.
 - A block in either direction with the host makes the booking `404`, including open bookings.
 - A block between two non-host participants omits each of them from the other's roster. Seat counts stay numeric and do not name the hidden person.
 

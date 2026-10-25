@@ -193,10 +193,19 @@ test("scheduled sessions stay private and do not complete themselves", () => {
   assert.match(migration, /ambiguous in America\/Chicago/);
   assert.match(migration, /does not exist in America\/Chicago/);
   assert.match(migration, /enable row level security/);
+  assert.match(migration, /using \(public\.study_session_visible\(id\)\)/);
+  assert.match(migration, /using \(public\.study_session_participant_visible\(session_id, user_id\)\)/);
+  assert.equal(migration.includes("where p.session_id = study_sessions.id"), false);
   assert.match(migration, /delete from public\.study_session_commitments where session_id = s\.id/);
   assert.match(migration, /apply_block_to_study_sessions/);
+  assert.match(migration, /hashtextextended\('session:' \|\| target_id::text, 1\)/);
+  assert.match(migration, /if not found then\s+raise exception 'CONFLICT: that invitation is no longer pending'/);
   assert.equal(
     migration.includes("grant execute on function public.study_session_payload(uuid) to authenticated"),
+    false,
+  );
+  assert.equal(
+    migration.includes("grant execute on function public.study_session_payload(uuid, boolean) to authenticated"),
     false,
   );
   assert.equal(migration.includes("discovery_candidates"), false);

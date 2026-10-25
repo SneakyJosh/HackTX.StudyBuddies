@@ -1,7 +1,11 @@
 -- Milestone 9 scheduled sessions. Additive. Does not change check-ins, discovery, or study requests.
 -- Apply only after review. Do not edit 0001 or 0002.
 
-create extension if not exists btree_gist;
+create extension if not exists btree_gist with schema extensions;
+
+-- The exclusion constraint needs btree_gist's uuid operator class. This lasts
+-- for the migration session only and does not change the database search path.
+set search_path = public, extensions;
 
 create table public.study_sessions (
   id uuid primary key default gen_random_uuid(),
@@ -98,7 +102,10 @@ begin
 end;
 $fn$;
 
-create or replace function public.study_session_payload(p_session_id uuid)
+create or replace function public.study_session_payload(
+  p_session_id uuid,
+  p_include_inactive boolean default false
+)
 returns jsonb
 language plpgsql
 volatile
@@ -136,14 +143,20 @@ begin
   from public.study_session_participants p
   where p.session_id = s.id and p.user_id = uid;
 
-  if caller_role is null then
-    if s.visibility <> 'open' or s.status <> 'scheduled' or s.ends_at <= pg_catalog.clock_timestamp() then
-      raise exception 'NOT_FOUND: session not found' using errcode = 'P0002';
-    end if;
-    if not exists (
-      select 1 from public.profiles me
-      where me.id = uid and me.university_id = s.university_id
-    ) then
+  -- Inactive rows do not keep a private schedule. Decline and leave pass
+  -- p_include_inactive so their own response can return after the status write.
+  -- A stranger, or a declined/left/cancelled caller, falls through to the
+  -- public open-booking rules. NULL status must not pass the IN test.
+  if uid <> s.host_id
+     and coalesce(caller_status, '') not in ('accepted', 'invited', 'requested')
+     and not p_include_inactive then
+    if s.visibility <> 'open'
+       or s.status <> 'scheduled'
+       or s.ends_at <= pg_catalog.clock_timestamp()
+       or not exists (
+         select 1 from public.profiles me
+         where me.id = uid and me.university_id = s.university_id
+       ) then
       raise exception 'NOT_FOUND: session not found' using errcode = 'P0002';
     end if;
   end if;
@@ -564,17 +577,34 @@ begin
   end if;
   select status into current_status
   from public.study_session_participants
-  where session_id = s.id and user_id = uid and role = 'invitee';
+  where session_id = s.id and user_id = uid and role = 'invitee'
+  for update;
   if current_status is null then
     raise exception 'NOT_FOUND: session not found' using errcode = 'P0002';
   end if;
-  if current_status <> 'invited' or s.status <> 'scheduled' then
+  if current_status <> 'invited' or s.status <> 'scheduled' or s.ends_at <= pg_catalog.clock_timestamp() then
     raise exception 'CONFLICT: that invitation is no longer pending' using errcode = 'P0001';
+  end if;
+  if not exists (
+    select 1 from public.profiles me
+    where me.id = uid and me.university_id = s.university_id
+  ) then
+    raise exception 'FORBIDDEN: invitee is on another campus' using errcode = '42501';
+  end if;
+  if exists (
+    select 1 from public.blocks b
+    where (b.blocker_id = uid and b.blocked_id = s.host_id)
+       or (b.blocker_id = s.host_id and b.blocked_id = uid)
+  ) then
+    raise exception 'NOT_FOUND: session not found' using errcode = 'P0002';
   end if;
   if p_status = 'declined' then
     update public.study_session_participants set status = 'declined'
     where session_id = s.id and user_id = uid and status = 'invited';
-    return public.study_session_payload(s.id);
+    if not found then
+      raise exception 'CONFLICT: that invitation is no longer pending' using errcode = 'P0001';
+    end if;
+    return public.study_session_payload(s.id, true);
   end if;
   if exists (
     select 1 from public.study_session_commitments c
@@ -586,6 +616,9 @@ begin
   end if;
   update public.study_session_participants set status = 'accepted'
   where session_id = s.id and user_id = uid and status = 'invited';
+  if not found then
+    raise exception 'CONFLICT: that invitation is no longer pending' using errcode = 'P0001';
+  end if;
   insert into public.study_session_commitments (user_id, session_id, starts_at, ends_at)
   values (uid, s.id, s.starts_at, s.ends_at);
   return public.study_session_payload(s.id);
@@ -674,17 +707,27 @@ begin
   end if;
   select status into current_status
   from public.study_session_participants
-  where session_id = s.id and user_id = p_user_id and role = 'joiner';
+  where session_id = s.id and user_id = p_user_id and role = 'joiner'
+  for update;
   if current_status is null then
     raise exception 'NOT_FOUND: join request not found' using errcode = 'P0002';
   end if;
-  if current_status <> 'requested' or s.status <> 'scheduled' then
+  if current_status <> 'requested' or s.status <> 'scheduled' or s.ends_at <= pg_catalog.clock_timestamp() then
     raise exception 'CONFLICT: that join request is no longer pending' using errcode = 'P0001';
+  end if;
+  if not exists (
+    select 1 from public.profiles student
+    where student.id = p_user_id and student.university_id = s.university_id
+  ) then
+    raise exception 'FORBIDDEN: that student is on another campus' using errcode = '42501';
   end if;
   if p_status = 'declined' then
     update public.study_session_participants set status = 'declined'
     where session_id = s.id and user_id = p_user_id and status = 'requested';
-    return public.study_session_payload(s.id);
+    if not found then
+      raise exception 'CONFLICT: that join request is no longer pending' using errcode = 'P0001';
+    end if;
+    return public.study_session_payload(s.id, true);
   end if;
   select count(*) filter (where status in ('accepted', 'invited')) into reserved
   from public.study_session_participants where session_id = s.id;
@@ -743,7 +786,8 @@ begin
   end if;
   select role, status into current_role, current_status
   from public.study_session_participants
-  where session_id = s.id and user_id = uid;
+  where session_id = s.id and user_id = uid
+  for update;
   if current_role is null then
     raise exception 'NOT_FOUND: session not found' using errcode = 'P0002';
   end if;
@@ -755,8 +799,11 @@ begin
   end if;
   update public.study_session_participants set status = 'left'
   where session_id = s.id and user_id = uid and status = 'accepted';
+  if not found then
+    raise exception 'CONFLICT: you do not have a seat to leave' using errcode = 'P0001';
+  end if;
   delete from public.study_session_commitments where session_id = s.id and user_id = uid;
-  return public.study_session_payload(s.id);
+  return public.study_session_payload(s.id, true);
 end;
 $fn$;
 
@@ -836,11 +883,28 @@ language plpgsql
 security definer
 set search_path = ''
 as $fn$
+declare
+  target_id uuid;
 begin
+  -- Same session lock, in id order, that accept, leave, and cancel hold.
+  -- Taking it first avoids writing a commitment back after this trigger deletes it.
+  for target_id in
+    select s.id
+    from public.study_sessions s
+    where s.status = 'scheduled'
+      and s.ends_at > pg_catalog.clock_timestamp()
+      and s.host_id in (new.blocker_id, new.blocked_id)
+    order by s.id
+  loop
+    perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('session:' || target_id::text, 1));
+  end loop;
+
   update public.study_session_participants p
   set status = 'cancelled'
   from public.study_sessions s
   where p.session_id = s.id
+    and s.status = 'scheduled'
+    and s.ends_at > pg_catalog.clock_timestamp()
     and p.role <> 'host'
     and p.status in ('invited', 'requested', 'accepted')
     and (
@@ -850,6 +914,8 @@ begin
   delete from public.study_session_commitments c
   using public.study_sessions s
   where c.session_id = s.id
+    and s.status = 'scheduled'
+    and s.ends_at > pg_catalog.clock_timestamp()
     and (
       (s.host_id = new.blocker_id and c.user_id = new.blocked_id)
       or (s.host_id = new.blocked_id and c.user_id = new.blocker_id)
@@ -866,25 +932,64 @@ alter table public.study_sessions enable row level security;
 alter table public.study_session_participants enable row level security;
 alter table public.study_session_commitments enable row level security;
 
+-- Policies call security-definer predicates. A policy that selected the other
+-- table directly would recurse, because each table's policy would re-enter the other.
+create or replace function public.study_session_visible(p_session_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select exists (
+    select 1
+    from public.study_sessions s
+    where s.id = p_session_id
+      and (
+        s.host_id = auth.uid()
+        or exists (
+          select 1
+          from public.study_session_participants p
+          where p.session_id = s.id
+            and p.user_id = auth.uid()
+            and p.status in ('invited', 'requested', 'accepted')
+            and not exists (
+              select 1
+              from public.blocks b
+              where (b.blocker_id = auth.uid() and b.blocked_id = s.host_id)
+                 or (b.blocker_id = s.host_id and b.blocked_id = auth.uid())
+            )
+        )
+      )
+  );
+$fn$;
+
+create or replace function public.study_session_participant_visible(p_session_id uuid, p_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $fn$
+  select auth.uid() is not null
+    and (
+      p_user_id = auth.uid()
+      or exists (
+        select 1
+        from public.study_sessions s
+        where s.id = p_session_id
+          and s.host_id = auth.uid()
+      )
+    );
+$fn$;
+
 create policy "study_sessions_select_participant" on public.study_sessions
   for select to authenticated
-  using (
-    host_id = auth.uid()
-    or exists (
-      select 1 from public.study_session_participants p
-      where p.session_id = study_sessions.id and p.user_id = auth.uid()
-    )
-  );
+  using (public.study_session_visible(id));
 
 create policy "study_session_participants_select_own_or_host" on public.study_session_participants
   for select to authenticated
-  using (
-    user_id = auth.uid()
-    or exists (
-      select 1 from public.study_sessions s
-      where s.id = study_session_participants.session_id and s.host_id = auth.uid()
-    )
-  );
+  using (public.study_session_participant_visible(session_id, user_id));
 
 create policy "study_session_commitments_select_own" on public.study_session_commitments
   for select to authenticated
@@ -895,8 +1000,10 @@ grant select on public.study_sessions, public.study_session_participants, public
 grant all on public.study_sessions, public.study_session_participants, public.study_session_commitments to service_role;
 
 revoke all on function public.campus_instant(timestamp) from public, anon, authenticated;
-revoke all on function public.study_session_payload(uuid) from public, anon, authenticated;
+revoke all on function public.study_session_payload(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.assert_session_partner(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.study_session_visible(uuid) from public, anon;
+revoke all on function public.study_session_participant_visible(uuid, uuid) from public, anon;
 revoke all on function public.enforce_profile_university_change() from public, anon, authenticated;
 revoke all on function public.apply_block_to_study_sessions() from public, anon, authenticated;
 
@@ -921,3 +1028,5 @@ grant execute on function public.request_join_study_session(uuid) to authenticat
 grant execute on function public.respond_study_session_join(uuid, uuid, text) to authenticated;
 grant execute on function public.leave_study_session(uuid) to authenticated;
 grant execute on function public.cancel_study_session(uuid) to authenticated;
+grant execute on function public.study_session_visible(uuid) to authenticated;
+grant execute on function public.study_session_participant_visible(uuid, uuid) to authenticated;
