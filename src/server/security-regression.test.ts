@@ -213,3 +213,18 @@ test("scheduled sessions stay private and do not complete themselves", () => {
   assert.equal(readFileSync("supabase/migrations/0002_fix_pair_lock_least_greatest.sql", "utf8").includes("study_sessions"), false);
   assert.match(scoring, /function public\.discovery_candidates/);
 });
+
+test("create_study_session does not shadow commitment columns", () => {
+  const migration = readFileSync("supabase/migrations/0004_fix_create_session_column_ambiguity.sql", "utf8");
+  const applied = readFileSync("supabase/migrations/0003_study_sessions.sql", "utf8");
+  assert.match(migration, /create or replace function public\.create_study_session/);
+  assert.match(
+    migration,
+    /tstzrange\(c\.starts_at, c\.ends_at, '\[\)'\) && tstzrange\(session_starts, session_ends, '\[\)'\)/,
+  );
+  assert.equal(migration.includes("tstzrange(starts_at, ends_at"), false);
+  assert.equal(migration.includes("discovery_candidates"), false);
+  assert.equal(/drop table/i.test(migration), false);
+  assert.match(applied, /function public\.create_study_session/);
+  assert.match(applied, /tstzrange\(starts_at, ends_at, '\[\)'\)/);
+});
