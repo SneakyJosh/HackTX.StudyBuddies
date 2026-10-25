@@ -30,8 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <main className="mx-auto grid max-w-lg gap-4">
               <h1 className="text-2xl font-semibold">Sign in required</h1>
               <p className="text-sm leading-6 text-muted">
-                Discover, check-in, requests, and profile stay private until you sign in with a labeled
-                demo account.
+                Discover, check-in, requests, and profile stay private until you sign in.
               </p>
               <LinkButton href="/" className="self-start">
                 Sign in
