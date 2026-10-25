@@ -32,7 +32,7 @@ export function SignInPanel() {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-page px-5">
         <p role="status" className="font-display text-2xl font-extrabold">
-          Loading StudyBuddy
+          Loading StudyBuddie
         </p>
       </main>
     );
@@ -60,7 +60,7 @@ export function SignInPanel() {
   return (
     <main className="min-h-dvh bg-background lg:grid lg:grid-cols-[minmax(0,1.05fr)_minmax(440px,0.95fr)] lg:bg-page">
       <section className="relative hidden flex-col justify-between overflow-hidden px-12 py-10 lg:flex xl:px-16">
-        <p className="font-display text-3xl font-extrabold">StudyBuddy</p>
+        <p className="font-display text-3xl font-extrabold">StudyBuddie</p>
         <div className="max-w-xl">
           <BrandMark size={120} />
           <h1 className="mt-8 font-display text-5xl leading-[1.05] font-extrabold">
@@ -90,7 +90,7 @@ export function SignInPanel() {
             <div className="flex flex-1 flex-col">
               <div className="flex flex-1 flex-col items-center justify-center text-center lg:items-start lg:text-left">
                 <BrandMark size={104} />
-                <h1 className="mt-6 font-display text-[2.6rem] leading-none font-extrabold">StudyBuddy</h1>
+                <h1 className="mt-6 font-display text-[2.6rem] leading-none font-extrabold">StudyBuddie</h1>
                 <p className="mt-4 max-w-sm text-[15px] leading-6 text-muted">
                   Keep your study plans on campus, find a partner, and pick a public building.
                 </p>
@@ -100,7 +100,7 @@ export function SignInPanel() {
                   Sign in
                 </Button>
                 <p className="text-center text-sm leading-6 text-muted lg:text-left">
-                  Use the email and password for your StudyBuddy account.
+                  Use the email and password for your StudyBuddie account.
                 </p>
                 {demo.userId ? (
                   <div className="rounded-[20px] border border-line bg-surface px-4 py-4 text-left">

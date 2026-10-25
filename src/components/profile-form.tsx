@@ -171,7 +171,7 @@ export function ProfileForm() {
     <div className="grid w-full gap-5">
       <PageHeader
         title="Profile"
-        description="Name, campus, courses, study style, session length, group size, and discovery visibility. These are the fields StudyBuddy stores."
+        description="Name, campus, courses, study style, session length, group size, and discovery visibility. These are the fields StudyBuddie stores."
       />
       <StudyStatsCard variant="full" />
       <form

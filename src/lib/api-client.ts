@@ -35,7 +35,7 @@ import type {
 } from "@/types/api";
 
 /**
- * Live StudyBuddy client. Calls the same-origin API with the Supabase session
+ * Live StudyBuddie client. Calls the same-origin API with the Supabase session
  * cookie. Discovery scores and order come from the server unchanged.
  */
 
@@ -92,7 +92,7 @@ async function request<T>(path: string, init?: { method?: string; body?: unknown
     }
     return parsed as T;
   } catch {
-    return apiError("INTERNAL_ERROR", "The request could not reach StudyBuddy.");
+    return apiError("INTERNAL_ERROR", "The request could not reach StudyBuddie.");
   }
 }
 

@@ -16,11 +16,12 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
+  applicationName: "StudyBuddie",
   title: {
-    default: "StudyBuddy",
-    template: "%s · StudyBuddy",
+    default: "StudyBuddie",
+    template: "%s · StudyBuddie",
   },
-  description: "Find a study partner at a public campus building.",
+  description: "StudyBuddie helps you find a study partner at a public campus building.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

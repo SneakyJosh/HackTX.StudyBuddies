@@ -1,4 +1,4 @@
-export function BrandMark({ size = 88, label = "StudyBuddy" }: { size?: number; label?: string }) {
+export function BrandMark({ size = 88, label = "StudyBuddie" }: { size?: number; label?: string }) {
   return (
     <div
       className="brand-orb grid shrink-0 place-items-center rounded-full"
