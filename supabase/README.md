@@ -1,7 +1,17 @@
 # Supabase — StudySync backend
 
-Schema and catalog seed live in `migrations/0001_studysync.sql`.
-That file is for review. Do not apply it to a live database without approval.
+Schema and catalog seed live in `migrations/0001_studysync.sql`, which has
+been applied to the isolated studysync-dev project and is now frozen.
+`migrations/0002_fix_pair_lock_least_greatest.sql` is an additive fix that
+must be applied after it: 0001's request/block insert triggers compute
+their pair lock with `pg_catalog.least/greatest(uuid, uuid)`, which does
+not exist (PostgreSQL 42883 — least/greatest are parser expressions, not
+catalog functions) and breaks `POST /api/requests` (and would break
+`POST /api/blocks` identically). 0002 replaces just those two trigger
+functions with the unqualified form; nothing else changes, and the
+replacement was verified end-to-end on a scratch PostgreSQL (real 0001,
+two profiles/check-ins: 42883 before, success after). Apply 0002 only
+with explicit approval; do not edit 0001 to back-fix it.
 
 `seed.sql` repeats the same public catalog rows so a local reset can load
 them again. Both files seed only the demo university, three locations, and

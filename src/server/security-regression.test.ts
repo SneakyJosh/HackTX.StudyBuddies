@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 /**
@@ -80,6 +80,30 @@ test("blocked pairs cannot leak counterpart data through study_request_payload",
   // Server code must not call the internal helper directly either.
   const requestsSource = readFileSync("src/server/requests.ts", "utf8");
   assert.equal(requestsSource.includes('rpc("study_request_payload"'), false);
+});
+
+test("pair-lock triggers never call pg_catalog.least/greatest (42883 regression)", () => {
+  // least/greatest are parser expressions, not catalog functions:
+  // pg_catalog.least(uuid, uuid) raises 42883 on the request/block insert
+  // triggers. 0001 is already applied and keeps the defective text; 0002
+  // supersedes both functions with the unqualified form.
+  const fix = readFileSync(
+    "supabase/migrations/0002_fix_pair_lock_least_greatest.sql",
+    "utf8",
+  );
+  assert.match(fix, /create or replace function public\.enforce_request_insert_rules\(\)/);
+  assert.match(fix, /create or replace function public\.enforce_block_insert_rules\(\)/);
+  assert.match(fix, /least\(new\.sender_id, new\.recipient_id\)/);
+  assert.match(fix, /greatest\(new\.sender_id, new\.recipient_id\)/);
+  assert.match(fix, /least\(new\.blocker_id, new\.blocked_id\)/);
+  assert.match(fix, /greatest\(new\.blocker_id, new\.blocked_id\)/);
+  // No migration other than the frozen, already-applied 0001 may contain
+  // a schema-qualified least/greatest call.
+  for (const file of readdirSync("supabase/migrations")) {
+    if (file === "0001_studysync.sql") continue;
+    const source = readFileSync(`supabase/migrations/${file}`, "utf8");
+    assert.equal(/pg_catalog\.(least|greatest)\(new\./.test(source), false, file);
+  }
 });
 
 test("no general-purpose privileged client or service-role credential remains in server code", () => {
