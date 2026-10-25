@@ -26,15 +26,19 @@ export function ProfileCard({
   error,
   onRequest,
   onOpen,
+  grok = null,
 }: {
   match: DiscoveryMatch;
   sending: boolean;
   error: string | null;
   onRequest: (recipientId: string) => void;
   onOpen?: () => void;
+  grok?: { score: number; reasons: string[] } | null;
 }) {
   const { user, course, location, availability, compatibilityScore, reasons, requestStatus } = match;
-  const leadReason = strongestReason(reasons);
+  const score = grok?.score ?? compatibilityScore;
+  const leadReason = grok?.reasons[0] ?? strongestReason(reasons);
+  const secondReason = grok?.reasons[1] ?? null;
   return (
     <article className={cardClass + " flex h-full flex-col"}>
       <div className="flex items-start gap-3">
@@ -49,11 +53,13 @@ export function ProfileCard({
           <h2 className="font-display text-xl leading-tight font-bold">{user.displayName}</h2>
           <p className="mt-1 text-sm text-muted">{formatPersonMeta(user.major, user.academicYear)}</p>
         </div>
-        <p className="text-right" aria-label={`${compatibilityScore} percent compatibility`}>
+        <p className="text-right" aria-label={`${score} percent compatibility`}>
           <span className="block font-display text-[1.7rem] leading-none font-extrabold tabular-nums text-accent">
-            {compatibilityScore}%
+            {score}%
           </span>
-          <span className="mt-1 block text-[11px] font-bold tracking-wide text-muted uppercase">Match</span>
+          <span className="mt-1 block text-[11px] font-bold tracking-wide text-muted uppercase">
+            {grok ? "Grok AI" : "Match"}
+          </span>
         </p>
       </div>
       <p className="mt-4 inline-flex max-w-full flex-wrap items-baseline gap-x-2 gap-y-1 self-start rounded-full bg-accent-soft px-3 py-1 text-sm font-bold text-accent">
@@ -70,6 +76,7 @@ export function ProfileCard({
       ) : (
         <p className="mt-4 text-sm text-muted">A score of 0 has no explanation.</p>
       )}
+      {secondReason ? <p className="mt-1 text-sm text-muted">{secondReason}</p> : null}
       <div className="mt-4 flex flex-wrap gap-2">
         {onOpen ? (
           <Button variant="secondary" onClick={onOpen}>

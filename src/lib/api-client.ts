@@ -11,6 +11,7 @@ import type {
   CheckoutResult,
   Course,
   DiscoveryMatch,
+  GrokCompatibility,
   Location,
   PatchRequestBody,
   PostCheckinBody,
@@ -173,6 +174,16 @@ export async function getDiscovery(
   if (filters.courseId) params.set("courseId", filters.courseId);
   const suffix = params.size > 0 ? `?${params.toString()}` : "";
   return request<ApiList<DiscoveryMatch>>(`/api/discovery${suffix}`);
+}
+
+export async function getGrokCompatibility(
+  filters: DiscoveryFilters = {},
+): Promise<ApiList<GrokCompatibility> | ApiError> {
+  const params = new URLSearchParams();
+  if (filters.locationId) params.set("locationId", filters.locationId);
+  if (filters.courseId) params.set("courseId", filters.courseId);
+  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  return request<ApiList<GrokCompatibility>>(`/api/discovery/grok${suffix}`);
 }
 
 export async function getRequests(

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCourses, getDiscovery, getLocations, isApiError, postRequest } from "@/lib/api-client";
+import { getCourses, getDiscovery, getGrokCompatibility, getLocations, isApiError, postRequest } from "@/lib/api-client";
 import { strongestReason } from "@/lib/match-reason";
 import { AVAILABILITY_LABELS, STUDY_STYLE_LABELS, formatPersonMeta, formatTimestamp, initials } from "@/lib/labels";
-import type { Course, DiscoveryMatch, Location } from "@/types/api";
+import type { Course, DiscoveryMatch, GrokCompatibility, Location } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { ProfileCard } from "@/components/profile-card";
 import {
@@ -25,6 +25,7 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
   const [locationId, setLocationId] = useState("");
   const [courseId, setCourseId] = useState("");
   const [matches, setMatches] = useState<DiscoveryMatch[] | null>(null);
+  const [grok, setGrok] = useState<Record<string, GrokCompatibility>>({});
   const [count, setCount] = useState(0);
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
   const [message, setMessage] = useState("Could not load discovery.");
@@ -65,12 +66,33 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
       }
       setMatches(result.data);
       setCount(result.meta.count);
+      setGrok({});
       setPhase("ready");
     })();
     return () => {
       cancelled = true;
     };
   }, [demo.ready, demo.userId, demo.revision, locationId, courseId, reloadKey]);
+
+  useEffect(() => {
+    if (!demo.ready || !demo.userId || phase !== "ready" || !matches || matches.length === 0) return;
+    let cancelled = false;
+    const filters: { locationId?: string; courseId?: string } = {};
+    if (locationId) filters.locationId = locationId;
+    if (courseId) filters.courseId = courseId;
+    void (async () => {
+      const result = await getGrokCompatibility(filters);
+      if (cancelled || isApiError(result)) return;
+      const next: Record<string, GrokCompatibility> = {};
+      for (const row of result.data) {
+        if (row.source === "grok") next[row.userId] = row;
+      }
+      setGrok(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [demo.ready, demo.userId, phase, matches, locationId, courseId]);
 
   async function sendRequest(recipientId: string) {
     setSendingId(recipientId);
@@ -92,7 +114,7 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
         <div>
           <h2 className="font-display text-xl font-bold">Suggested study buddies</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
-            Ranked by the current server score, with the strongest reason shown. The list stays in the order the server returned.
+            Ranked by the current server score. Grok can replace the first five percentages after the list loads.
           </p>
         </div>
       ) : (
@@ -160,7 +182,9 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
             {count} {count === 1 ? "student" : "students"}
           </p>
           <div className="grid w-full gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {matches.map((match) => (
+            {matches.map((match) => {
+              const ai = grok[match.user.id];
+              return (
               <ProfileCard
                 key={match.user.id}
                 match={match}
@@ -168,8 +192,10 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
                 error={requestError?.userId === match.user.id ? requestError.message : null}
                 onRequest={(recipientId) => void sendRequest(recipientId)}
                 onOpen={() => setSelectedId(match.user.id)}
+                grok={ai?.source === "grok" ? { score: ai.score, reasons: ai.reasons } : null}
               />
-            ))}
+              );
+            })}
           </div>
         </>
       ) : null}
@@ -177,6 +203,7 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
         {selected ? (
           <StudentSheet
             match={selected}
+            grok={grok[selected.user.id]?.source === "grok" ? grok[selected.user.id] : null}
             sending={sendingId === selected.user.id}
             error={requestError?.userId === selected.user.id ? requestError.message : null}
             onRequest={() => void sendRequest(selected.user.id)}
@@ -204,14 +231,18 @@ function StudentSheet({
   sending,
   error,
   onRequest,
+  grok = null,
 }: {
   match: DiscoveryMatch;
   sending: boolean;
   error: string | null;
   onRequest: () => void;
+  grok?: { score: number; reasons: string[] } | null;
 }) {
   const { user, course, location, availability, compatibilityScore, reasons, requestStatus, checkinExpiresAt } = match;
-  const leadReason = strongestReason(reasons);
+  const score = grok?.score ?? compatibilityScore;
+  const leadReason = grok?.reasons[0] ?? strongestReason(reasons);
+  const secondReason = grok?.reasons[1] ?? null;
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-3">
@@ -223,9 +254,10 @@ function StudentSheet({
           <p className="text-sm text-muted">{formatPersonMeta(user.major, user.academicYear)}</p>
         </div>
       </div>
-      <p className="font-display text-4xl font-extrabold text-accent" aria-label={`${compatibilityScore} percent compatibility`}>
-        {compatibilityScore}%
+      <p className="font-display text-4xl font-extrabold text-accent" aria-label={`${score} percent compatibility`}>
+        {score}%
       </p>
+      {grok ? <p className="text-xs font-bold tracking-wide text-muted uppercase">Grok AI</p> : null}
       <p className="text-sm leading-6">
         {course.code} · {course.title}
       </p>
@@ -240,6 +272,7 @@ function StudentSheet({
       ) : (
         <p className="text-sm text-muted">A score of 0 has no explanation.</p>
       )}
+      {secondReason ? <p className="text-sm text-muted">{secondReason}</p> : null}
       {requestStatus === "pending" ? (
         <p className="text-sm font-semibold">A study request is already pending.</p>
       ) : requestStatus === "accepted" ? (

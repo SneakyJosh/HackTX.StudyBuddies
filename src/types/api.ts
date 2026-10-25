@@ -237,6 +237,14 @@ export type DiscoveryMatch = {
   requestStatus: RequestStatus | null;
 };
 
+/** A Grok estimate for one already-eligible suggestion, or the Matching v1 fallback. */
+export type GrokCompatibility = {
+  userId: string;
+  score: number;
+  reasons: string[];
+  source: "grok" | "matching";
+};
+
 export type RequestCounterpart = {
   id: string;
   displayName: string;
