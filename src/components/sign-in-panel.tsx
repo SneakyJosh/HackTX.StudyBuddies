@@ -30,7 +30,7 @@ export function SignInPanel() {
 
   if (!demo.ready) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-page px-5">
+      <main className="flex min-h-dvh items-center justify-center bg-page px-[max(1.25rem,env(safe-area-inset-left))] pt-[env(safe-area-inset-top)]">
         <p role="status" className="font-display text-2xl font-extrabold">
           Loading StudyBuddie
         </p>
@@ -84,7 +84,7 @@ export function SignInPanel() {
         </ul>
       </section>
 
-      <section className="flex min-h-dvh flex-col bg-background px-5 py-8 sm:px-10 lg:justify-center lg:px-14 xl:px-20">
+      <section className="flex min-h-dvh flex-col overflow-x-clip bg-background px-[max(1.25rem,env(safe-area-inset-left))] pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-10 lg:justify-center lg:px-14 lg:py-8 xl:px-20">
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col lg:flex-none">
           {view === "welcome" ? (
             <div className="flex flex-1 flex-col">

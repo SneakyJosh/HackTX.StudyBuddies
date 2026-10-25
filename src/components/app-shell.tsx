@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!demo.ready || !demo.userId) {
     return (
       <div className="min-h-dvh bg-page">
-        <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 py-6 lg:px-10">
+        <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-[max(1.25rem,env(safe-area-inset-left))] py-[max(1.5rem,env(safe-area-inset-top))] lg:px-10">
           <header className="flex items-center gap-3">
             <BrandMark size={44} />
             <p className="font-display text-2xl font-extrabold">StudyBuddie</p>
@@ -147,14 +147,14 @@ function SignedInShell({
           </nav>
           <div className="mt-auto border-t border-line px-5 py-4">
             <p className="truncate text-sm font-bold">{accountLabel}</p>
-            <button type="button" className="mt-1 text-sm font-bold text-accent" onClick={signOutAndLeave}>
+            <button type="button" className="mt-1 min-h-11 text-sm font-bold text-accent" onClick={signOutAndLeave}>
               Sign out
             </button>
           </div>
         </aside>
 
         <div className="flex min-h-dvh min-w-0 flex-col">
-          <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-background/95 px-4 py-3 backdrop-blur-sm lg:px-8">
+          <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-background/95 px-[max(1rem,env(safe-area-inset-left))] pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 backdrop-blur-sm lg:px-8 lg:pt-3">
             <div className="min-w-0">
               <p className="font-display text-xl leading-none font-extrabold lg:hidden">StudyBuddie</p>
               <p className="font-display hidden text-2xl leading-none font-extrabold lg:block">
@@ -164,7 +164,7 @@ function SignedInShell({
             </div>
             <div className="text-right lg:hidden">
               <p className="max-w-40 truncate text-sm font-bold sm:max-w-xs">{accountLabel}</p>
-              <button type="button" className="text-sm font-bold text-accent" onClick={signOutAndLeave}>
+              <button type="button" className="min-h-11 text-sm font-bold text-accent" onClick={signOutAndLeave}>
                 Sign out
               </button>
             </div>
@@ -178,7 +178,7 @@ function SignedInShell({
               <span>{studyBanner.live ? `until ${studyBanner.until}` : "Finish to save minutes"}</span>
             </Link>
           ) : null}
-          <div className="flex-1 px-[18px] pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">
+          <div className="min-w-0 flex-1 overflow-x-clip px-[max(18px,env(safe-area-inset-left))] pt-5 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-10">
             <div className="mx-auto w-full max-w-[1180px] xl:max-w-none">{children}</div>
           </div>
         </div>
@@ -186,7 +186,7 @@ function SignedInShell({
 
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface px-1.5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface px-[max(0.375rem,env(safe-area-inset-left))] pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
       >
         <ul className="grid grid-cols-4">
           {TABS.map((tab) => (
