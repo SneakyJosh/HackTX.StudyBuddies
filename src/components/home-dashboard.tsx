@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCheckin, getCourses, getLocations, getProfile, getSessions, isApiError } from "@/lib/api-client";
 import { formatCampusTimestamp } from "@/lib/campus-time";
 import { AVAILABILITY_LABELS, formatTimestamp, initials } from "@/lib/labels";
@@ -21,12 +21,13 @@ export function HomeDashboard() {
   const [checkin, setCheckin] = useState<Checkin | null>(null);
   const [nextSession, setNextSession] = useState<ScheduledSession | null>(null);
   const [focusOpen, setFocusOpen] = useState(false);
+  const hasHome = useRef(false);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
-      setPhase("loading");
+      if (!hasHome.current) setPhase("loading");
       const [profileResult, courseResult, locationResult, checkinResult, sessionResult] = await Promise.all([
         getProfile(),
         getCourses(),
@@ -37,8 +38,10 @@ export function HomeDashboard() {
       if (cancelled) return;
       const failure = [profileResult, courseResult, locationResult, checkinResult].find(isApiError);
       if (failure && isApiError(failure)) {
-        setMessage(failure.error.message);
-        setPhase("error");
+        if (!hasHome.current) {
+          setMessage(failure.error.message);
+          setPhase("error");
+        }
         return;
       }
       if (isApiError(profileResult) || isApiError(courseResult) || isApiError(locationResult) || isApiError(checkinResult)) {
@@ -53,6 +56,7 @@ export function HomeDashboard() {
           ? null
           : sessionResult.data.find((session) => session.myRole === "host" || session.myStatus === "accepted") ?? null,
       );
+      hasHome.current = true;
       setPhase("ready");
     })();
     return () => {

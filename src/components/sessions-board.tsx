@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getCheckin,
   getCourses,
@@ -40,12 +40,13 @@ export function SessionsBoard() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [asOf, setAsOf] = useState<number | null>(null);
   const [rating, setRating] = useState<StudyRecord | null>(null);
+  const hasBoard = useRef(false);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
-      setPhase("loading");
+      if (!hasBoard.current) setPhase("loading");
       const [checkinResult, courseResult, locationResult, upcomingResult, pastResult] = await Promise.all([
         getCheckin(),
         getCourses(),
@@ -56,8 +57,10 @@ export function SessionsBoard() {
       if (cancelled) return;
       const failure = [checkinResult, courseResult, locationResult].find(isApiError);
       if (failure && isApiError(failure)) {
-        setMessage(failure.error.message);
-        setPhase("error");
+        if (!hasBoard.current) {
+          setMessage(failure.error.message);
+          setPhase("error");
+        }
         return;
       }
       if (isApiError(checkinResult) || isApiError(courseResult) || isApiError(locationResult)) return;
@@ -65,18 +68,23 @@ export function SessionsBoard() {
       setCourses(courseResult.data);
       setLocations(locationResult.data);
       if (isApiError(upcomingResult)) {
-        setUpcoming([]);
-        setPast([]);
-        setScheduleMessage(upcomingResult.error.message);
+        if (!hasBoard.current) {
+          setUpcoming([]);
+          setPast([]);
+          setScheduleMessage(upcomingResult.error.message);
+        }
       } else if (isApiError(pastResult)) {
-        setUpcoming([]);
-        setPast([]);
-        setScheduleMessage(pastResult.error.message);
+        if (!hasBoard.current) {
+          setUpcoming([]);
+          setPast([]);
+          setScheduleMessage(pastResult.error.message);
+        }
       } else {
         setUpcoming(upcomingResult.data);
         setPast(pastResult.data);
         setScheduleMessage(null);
       }
+      hasBoard.current = true;
       setAsOf(Date.now());
       setPhase("ready");
     })();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getStudyStats, isApiError } from "@/lib/api-client";
 import { STREAK_DAY_MINIMUM_MINUTES, STUDY_TIME_MINIMUM_MINUTES } from "@/lib/study-time";
 import type { StudyStats } from "@/types/api";
@@ -17,19 +17,23 @@ export function StudyStatsCard({ variant = "compact" }: { variant?: "compact" | 
   const demo = useDemo();
   const [stats, setStats] = useState<StudyStats | null>(null);
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
+  const hasStats = useRef(false);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
     let cancelled = false;
     void (async () => {
-      setPhase("loading");
+      if (!hasStats.current) setPhase("loading");
       const result = await getStudyStats();
       if (cancelled) return;
       if (isApiError(result)) {
-        setStats(null);
-        setPhase("error");
+        if (!hasStats.current) {
+          setStats(null);
+          setPhase("error");
+        }
         return;
       }
+      hasStats.current = true;
       setStats(result.data);
       setPhase("ready");
     })();

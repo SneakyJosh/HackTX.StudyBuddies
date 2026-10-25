@@ -61,6 +61,7 @@ export function FocusSheet({
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const [saved, setSaved] = useState<CheckinStudyRecord | null>(null);
   const savedHold = useRef<CheckinStudyRecord | null>(null);
+  const hasSheet = useRef(false);
   const [now, setNow] = useState<number | null>(null);
 
   function closeSheet() {
@@ -74,7 +75,7 @@ export function FocusSheet({
     if (!open || !demo.ready || !demo.userId || savedHold.current) return;
     let cancelled = false;
     void (async () => {
-      setPhase("loading");
+      if (!hasSheet.current) setPhase("loading");
       const [profileResult, courseResult, locationResult, checkinResult] = await Promise.all([
         getProfile(),
         getCourses(),
@@ -84,8 +85,10 @@ export function FocusSheet({
       if (cancelled || savedHold.current) return;
       const failure = [profileResult, courseResult, locationResult, checkinResult].find(isApiError);
       if (failure && isApiError(failure)) {
-        setLoadError(failure.error.message);
-        setPhase("error");
+        if (!hasSheet.current) {
+          setLoadError(failure.error.message);
+          setPhase("error");
+        }
         return;
       }
       if (isApiError(profileResult) || isApiError(courseResult) || isApiError(locationResult) || isApiError(checkinResult)) {
@@ -96,7 +99,12 @@ export function FocusSheet({
       setProfile(nextProfile);
       setCourses(courseResult.data);
       setLocations(locationResult.data);
-      setActive(checkinResult.data);
+      setActive((current) => (sameCheckin(current, checkinResult.data) ? current : checkinResult.data));
+      if (hasSheet.current && checkinResult.data) {
+        hasSheet.current = true;
+        setPhase("ready");
+        return;
+      }
       const presetCourse = preset?.courseId && profileCourses.some((course) => course.id === preset.courseId)
         ? preset.courseId
         : profileCourses[0]?.id ?? "";
@@ -110,6 +118,7 @@ export function FocusSheet({
         availability: "available",
         studyStyle: nextProfile?.studyStyle ?? "collaborative",
       });
+      hasSheet.current = true;
       setPhase("ready");
     })();
     return () => {
@@ -375,6 +384,20 @@ export function FocusSheet({
         </form>
       ) : null}
     </Sheet>
+  );
+}
+
+function sameCheckin(current: Checkin | null, next: Checkin | null): boolean {
+  if (!current || !next) return false;
+  return (
+    current.id === next.id &&
+    current.startedAt === next.startedAt &&
+    current.expiresAt === next.expiresAt &&
+    current.live === next.live &&
+    current.availability === next.availability &&
+    current.studyStyle === next.studyStyle &&
+    current.courseId === next.courseId &&
+    current.locationId === next.locationId
   );
 }
 
