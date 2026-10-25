@@ -7,10 +7,12 @@ export const CAMPUS_PLACE_SCORE = {
   academicCenterWhenFlexible: 20,
   libraryWhenFlexible: 12,
   studentHubWhenFlexible: 12,
+  cafeWhenCollaborative: 18,
+  cafeWhenFlexible: 12,
   callerHistory: 25,
 } as const;
 
-export type CampusRankCategory = "library" | "academic_center" | "student_hub";
+export type CampusRankCategory = "library" | "academic_center" | "student_hub" | "cafe";
 export type CampusRankStyle = "quiet" | "collaborative" | "flexible";
 
 export type CampusRankPlace = {
@@ -57,6 +59,9 @@ function scorePlace(place: CampusRankPlace, studyStyle: CampusRankStyle | null):
     } else if (place.category === "academic_center") {
       placeScore += CAMPUS_PLACE_SCORE.academicCenterWhenCollaborative;
       reasons.push("Academic center for group study");
+    } else if (place.category === "cafe") {
+      placeScore += CAMPUS_PLACE_SCORE.cafeWhenCollaborative;
+      reasons.push("Coffee shop for collaborative study");
     } else {
       placeScore += CAMPUS_PLACE_SCORE.libraryWhenCollaborative;
       reasons.push("Library study space");
@@ -68,6 +73,9 @@ function scorePlace(place: CampusRankPlace, studyStyle: CampusRankStyle | null):
     } else if (place.category === "library") {
       placeScore += CAMPUS_PLACE_SCORE.libraryWhenFlexible;
       reasons.push("Library study space");
+    } else if (place.category === "cafe") {
+      placeScore += CAMPUS_PLACE_SCORE.cafeWhenFlexible;
+      reasons.push("Coffee shop for a flexible study style");
     } else {
       placeScore += CAMPUS_PLACE_SCORE.studentHubWhenFlexible;
       reasons.push("Student hub for a flexible study style");
@@ -105,7 +113,14 @@ export function filterCampusPlaces<T extends { id: string; category: CampusRankC
   suggestions: readonly CampusRankSuggestion[],
   filter: CampusRankFilter,
 ): { places: T[]; suggestions: CampusRankSuggestion[] } {
-  if (filter === "coffee") return { places: [], suggestions: [] };
+  if (filter === "coffee") {
+    const visible = places.filter((place) => place.category === "cafe");
+    const ids = new Set(visible.map((place) => place.id));
+    return {
+      places: visible,
+      suggestions: suggestions.filter((suggestion) => ids.has(suggestion.placeId)),
+    };
+  }
   const visible = places.filter((place) => {
     if (filter === "all") return true;
     if (filter === "quiet") return place.quietZones.length > 0;

@@ -1,6 +1,6 @@
-import type { CampusCategory, CampusPlace, CampusQuietZone, StudyStyle } from "#api";
+import type { CampusCategory, CampusParent, CampusPlace, CampusQuietZone, StudyStyle } from "#api";
 
-const CATEGORIES = new Set<CampusCategory>(["library", "academic_center", "student_hub"]);
+const CATEGORIES = new Set<CampusCategory>(["library", "academic_center", "student_hub", "cafe"]);
 const STUDY_STYLES = new Set<StudyStyle>(["quiet", "collaborative", "flexible"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FORBIDDEN = new Set([
@@ -113,10 +113,27 @@ const PLACE_KEYS = [
   "historyVisits",
 ] as const;
 
+function asParent(value: unknown): CampusParent | null {
+  if (value === null) return null;
+  const parent = asRecord(value);
+  exactKeys(parent, ["name", "buildingCode"]);
+  const buildingCode = asText(parent.buildingCode, 12);
+  if (!/^[A-Z0-9]{2,12}$/.test(buildingCode)) badPayload();
+  return { name: asText(parent.name, 120), buildingCode };
+}
+
+function asDetail(value: unknown): string | null {
+  if (value === null) return null;
+  return asText(value, 240);
+}
+
 function asPlace(value: unknown): CampusPlaceRecord {
   const row = asRecord(value);
-  const withAnchors = sameKeys(row, [...PLACE_KEYS, "anchorLat", "anchorLng"]);
-  if (!withAnchors && !sameKeys(row, PLACE_KEYS)) badPayload();
+  const core = { ...row };
+  delete core.parent;
+  delete core.detail;
+  const withAnchors = sameKeys(core, [...PLACE_KEYS, "anchorLat", "anchorLng"]);
+  if (!withAnchors && !sameKeys(core, PLACE_KEYS)) badPayload();
   const category = row.category;
   if (typeof category !== "string" || !CATEGORIES.has(category as CampusCategory)) badPayload();
   const abbreviation = asText(row.abbreviation, 6);
@@ -126,6 +143,7 @@ function asPlace(value: unknown): CampusPlaceRecord {
   if (typeof bookingAvailable !== "boolean" || bookingAvailable !== (locationId !== null)) badPayload();
   if (!Array.isArray(row.quietZones) || row.quietZones.length > 12) badPayload();
   const quietZones = row.quietZones.map(asZone);
+  if (category === "cafe" && quietZones.length > 0) badPayload();
   return {
     id: asUuid(row.id),
     locationId,
@@ -140,6 +158,8 @@ function asPlace(value: unknown): CampusPlaceRecord {
     sortOrder: asCount(row.sortOrder, 1000),
     quietZones,
     historyVisits: asCount(row.historyVisits, 1000),
+    parent: Object.prototype.hasOwnProperty.call(row, "parent") ? asParent(row.parent) : null,
+    detail: Object.prototype.hasOwnProperty.call(row, "detail") ? asDetail(row.detail) : null,
   };
 }
 

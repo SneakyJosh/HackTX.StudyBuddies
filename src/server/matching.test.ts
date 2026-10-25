@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { MATCH_REASONS } from "#api";
+import { MATCH_POINTS, MATCH_REASONS } from "#api";
 import { strongestReason } from "../lib/match-reason.ts";
 import { rankDiscoveryCandidates, scoreMatch, type DiscoveryCandidate, type MatchPerson } from "./matching.ts";
 
@@ -50,6 +50,17 @@ test("score reaches 100 and does not include the location sort bonus", () => {
   const ranked = rankDiscoveryCandidates(caller(), [perfect]);
   assert.equal(ranked[0]?.compatibilityScore, 100);
   assert.equal(ranked[0]?.reasons.includes(MATCH_REASONS.sameLocation), true);
+});
+
+test("a cafe and its parent building do not score as the same location", () => {
+  const wel = "11111111-1111-4111-8111-111111111119";
+  const upAndAtom = "11111111-1111-4111-8111-11111111111f";
+  const scored = scoreMatch(
+    caller({ checkin: { courseId: M408C, locationId: wel, studyStyle: "quiet" } }),
+    candidate({ checkin: { courseId: M408C, locationId: upAndAtom, studyStyle: "quiet" } }),
+  );
+  assert.equal(scored.reasons.includes(MATCH_REASONS.sameLocation), false);
+  assert.equal(MATCH_POINTS.sameLocation, 20);
 });
 
 test("a score of 0 has no reasons", () => {

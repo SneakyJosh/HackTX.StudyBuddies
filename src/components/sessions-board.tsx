@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getCheckin,
   getCourses,
@@ -26,6 +27,10 @@ import { Button, EmptyBlock, ErrorBlock, LinkButton, LoadingBlock, cardClass } f
 
 export function SessionsBoard() {
   const demo = useDemo();
+  const params = useSearchParams();
+  const studyLocation = params.get("studyLocation");
+  const scheduleLocation = params.get("scheduleLocation");
+  const [appliedLocationKey, setAppliedLocationKey] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
   const [message, setMessage] = useState("Could not load sessions.");
   const [reloadKey, setReloadKey] = useState(0);
@@ -38,9 +43,9 @@ export function SessionsBoard() {
   const [focusOpen, setFocusOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [preset, setPreset] = useState<{
-    courseId: string;
+    courseId?: string;
     locationId: string;
-    durationMinutes: number;
+    durationMinutes?: number;
     groupSession?: GroupSessionRef;
   } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -106,6 +111,25 @@ export function SessionsBoard() {
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
   }, [demo.ready, demo.userId]);
+
+  const requestedStudy = phase === "ready" && studyLocation && locations.some((location) => location.id === studyLocation)
+    ? studyLocation
+    : null;
+  const requestedSchedule = phase === "ready" && !requestedStudy && scheduleLocation && locations.some((location) => location.id === scheduleLocation)
+    ? scheduleLocation
+    : null;
+  const requestedKey = requestedStudy ? `study:${requestedStudy}` : requestedSchedule ? `schedule:${requestedSchedule}` : null;
+  if (requestedKey && appliedLocationKey !== requestedKey) {
+    setAppliedLocationKey(requestedKey);
+    if (requestedStudy) {
+      setPreset({ locationId: requestedStudy });
+      setFocusOpen(true);
+      setScheduleOpen(false);
+    } else if (requestedSchedule) {
+      setScheduleOpen(true);
+      setFocusOpen(false);
+    }
+  }
 
   if (!demo.ready || phase === "loading") return <LoadingBlock label="Loading sessions" />;
   if (phase === "error") {
@@ -232,7 +256,11 @@ export function SessionsBoard() {
         )}
       </section>
       <SessionHistory />
-      <ScheduleSheet open={scheduleOpen} onClose={() => setScheduleOpen(false)} />
+      <ScheduleSheet
+        open={scheduleOpen}
+        presetLocationId={scheduleLocation}
+        onClose={() => setScheduleOpen(false)}
+      />
       <FocusSheet open={focusOpen} preset={preset} onClose={() => setFocusOpen(false)} onGroupFinished={setRating} />
       <RatingSheet record={rating} onClose={() => setRating(null)} />
     </div>

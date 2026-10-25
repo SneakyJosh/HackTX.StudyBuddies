@@ -2,7 +2,7 @@ export const POSITRON_STYLE_URL = "https://tiles.openfreemap.org/styles/positron
 
 /** West, south, east, north. Keeps pan and zoom on main campus. */
 export const CAMPUS_MAX_BOUNDS: [[number, number], [number, number]] = [
-  [-97.745, 30.278],
+  [-97.748, 30.278],
   [-97.73, 30.292],
 ];
 
@@ -25,7 +25,7 @@ export type CampusAnchor = {
   id: string;
   name: string;
   abbreviation: string;
-  category: "library" | "academic_center" | "student_hub";
+  category: "library" | "academic_center" | "student_hub" | "cafe";
   anchorLat: number;
   anchorLng: number;
 };

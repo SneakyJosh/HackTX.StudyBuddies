@@ -22,6 +22,8 @@ function publicPlace(place: CampusPlace & { sortOrder: number }): CampusPlace {
     anchorLng: place.anchorLng,
     quietZones: place.quietZones,
     historyVisits: place.historyVisits,
+    parent: place.parent,
+    detail: place.detail,
   };
 }
 

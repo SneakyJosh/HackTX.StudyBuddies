@@ -35,7 +35,15 @@ function timeOptions(): string[] {
 
 const TIMES = timeOptions();
 
-export function ScheduleSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ScheduleSheet({
+  open,
+  onClose,
+  presetLocationId = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  presetLocationId?: string | null;
+}) {
   const demo = useDemo();
   const formId = useId();
   const [step, setStep] = useState(1);
@@ -90,7 +98,10 @@ export function ScheduleSheet({ open, onClose }: { open: boolean; onClose: () =>
       }
       setPartners([...accepted.values()]);
       setCourseId(enrolled[0]?.id ?? "");
-      setLocationId(locationResult.data[0]?.id ?? "");
+      const presetLocation = presetLocationId && locationResult.data.some((location) => location.id === presetLocationId)
+        ? presetLocationId
+        : locationResult.data[0]?.id ?? "";
+      setLocationId(presetLocation);
       setDurationMinutes(profileResult.data?.preferredDurationMinutes ?? 60);
       const now = new Date();
       setToday(campusDate(now));
@@ -100,7 +111,7 @@ export function ScheduleSheet({ open, onClose }: { open: boolean; onClose: () =>
     return () => {
       cancelled = true;
     };
-  }, [open, demo.ready, demo.userId, demo.revision]);
+  }, [open, demo.ready, demo.userId, demo.revision, presetLocationId]);
 
   const seatCap = visibility === "solo" ? 1 : seatLimit;
 
@@ -202,13 +213,13 @@ export function ScheduleSheet({ open, onClose }: { open: boolean; onClose: () =>
           ) : null}
           {step === 2 ? (
             <fieldset className="grid gap-2">
-              <legend className="text-sm font-bold">Public building</legend>
+              <legend className="text-sm font-bold">Study location</legend>
               {locations.map((location) => (
                 <label key={location.id} className="flex min-h-11 items-center gap-3 rounded-[14px] border border-line px-3 py-2 text-sm has-[:checked]:border-accent">
                   <input type="radio" name={`${formId}-location`} checked={locationId === location.id} onChange={() => setLocationId(location.id)} />
                   <span>
                     <span className="block font-bold">{location.name}</span>
-                    <span className="text-muted">{location.buildingCode}</span>
+                    <span className="text-muted">{location.parent ? `${location.buildingCode} · ${location.parent.name}` : location.buildingCode}</span>
                   </span>
                 </label>
               ))}

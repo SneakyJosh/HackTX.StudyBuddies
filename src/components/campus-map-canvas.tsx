@@ -21,6 +21,7 @@ const PIN_TONE = {
   library: "border-[#2b9be0] bg-[#e7f6ff] text-[#10304a]",
   academic_center: "border-[#ff8a1f] bg-[#fff1e4] text-[#2e1600]",
   student_hub: "border-[#1e9e6e] bg-[#e7fff4] text-[#10304a]",
+  cafe: "border-[#c47b4a] bg-[#fff4ea] text-[#3a2416]",
 } as const;
 
 type Props = {
@@ -344,7 +345,10 @@ function pinIcon(category: CampusAnchor["category"]): SVGElement {
   svg.setAttribute("class", "h-4 w-4 shrink-0");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("fill", "currentColor");
-  path.setAttribute("d", category === "library" ? BOOK_ICON : category === "student_hub" ? HUB_ICON : BUILDING_ICON);
+  path.setAttribute(
+    "d",
+    category === "library" ? BOOK_ICON : category === "student_hub" ? HUB_ICON : category === "cafe" ? COFFEE_ICON : BUILDING_ICON,
+  );
   svg.append(path);
   return svg;
 }
@@ -352,3 +356,4 @@ function pinIcon(category: CampusAnchor["category"]): SVGElement {
 const BOOK_ICON = "M5 4.5A2.5 2.5 0 0 1 7.5 2H20v16H7.5A2.5 2.5 0 0 0 5 20.5V4.5Zm2.5-.5a.5.5 0 0 0-.5.5V18h11V4H7.5Z";
 const BUILDING_ICON = "M4 20V8l8-5 8 5v12h-5v-6H9v6H4Zm2-2h2v-4h8v4h2V9.2L12 5.3 6 9.2V18Z";
 const HUB_ICON = "M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Zm8 1a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5ZM3 19c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5v1H3v-1Zm10 .5V19c0-1.2-.4-2.2-1.1-3.1 1.4-.5 3-.8 4.6-.8 2.4 0 4.5 1.4 4.5 3.8V20h-8v-.5Z";
+const COFFEE_ICON = "M6 4h9v2h2.2A2.8 2.8 0 0 1 20 8.8 2.8 2.8 0 0 1 17.2 11.6H15V14a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4Zm0 2a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2V6H6Zm9 2v1.6h2.2a.8.8 0 0 0 0-1.6H15ZM7 20h7v1.2H7V20Z";

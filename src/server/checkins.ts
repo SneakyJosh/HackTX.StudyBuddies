@@ -27,14 +27,25 @@ export async function replaceCheckin(
     throw validationError("Course is not on the caller profile", { courseId: "Course is not on the caller profile" });
   }
 
-  const location = await supabase
+  const rich = await supabase
     .from("locations")
-    .select("id, university_id, is_active")
+    .select("id, university_id, is_active, bookable")
     .eq("id", body.locationId)
     .maybeSingle();
-  if (location.error) throwMappedDbError(location.error);
-  const locationRow = location.data as { university_id: string; is_active: boolean } | null;
-  if (!locationRow || !locationRow.is_active || locationRow.university_id !== profile.universityId) {
+  let locationRow: { university_id: string; is_active: boolean; bookable?: boolean } | null = null;
+  if (rich.error && /bookable/i.test(rich.error.message)) {
+    const fallback = await supabase
+      .from("locations")
+      .select("id, university_id, is_active")
+      .eq("id", body.locationId)
+      .maybeSingle();
+    if (fallback.error) throwMappedDbError(fallback.error);
+    locationRow = fallback.data as { university_id: string; is_active: boolean } | null;
+  } else {
+    if (rich.error) throwMappedDbError(rich.error);
+    locationRow = rich.data as { university_id: string; is_active: boolean; bookable: boolean } | null;
+  }
+  if (!locationRow || !locationRow.is_active || locationRow.bookable === false || locationRow.university_id !== profile.universityId) {
     throw validationError("Location is not available for this university", {
       locationId: "Location is not available for this university",
     });

@@ -121,18 +121,33 @@ export type Profile = {
   visible: boolean;
 };
 
+export type LocationKind = "building" | "cafe";
+
+export type LocationParent = {
+  id: string;
+  name: string;
+  buildingCode: string;
+};
+
 export type Location = {
   id: string;
   universityId: string;
   name: string;
   buildingCode: string;
   description: string | null;
+  kind: LocationKind;
+  parent: LocationParent | null;
 };
 
 /** Building-level public place. No description, room, desk, or coordinates. */
 export type PublicLocation = Pick<Location, "id" | "name" | "buildingCode">;
 
-export type CampusCategory = "library" | "academic_center" | "student_hub";
+export type CampusCategory = "library" | "academic_center" | "student_hub" | "cafe";
+
+export type CampusParent = {
+  name: string;
+  buildingCode: string;
+};
 
 export type CampusQuietZone = {
   id: string;
@@ -158,6 +173,8 @@ export type CampusPlace = {
   anchorLng: number | null;
   quietZones: CampusQuietZone[];
   historyVisits: number;
+  parent: CampusParent | null;
+  detail: string | null;
 };
 
 /** Rank for the campus list. This is not compatibilityScore. */
@@ -460,6 +477,8 @@ export const DEMO_LOCATIONS = [
     name: "Perry-Castañeda Library",
     buildingCode: "PCL",
     description: "Public library study spaces",
+    kind: "building",
+    parent: null,
   },
   {
     id: "11111111-1111-4111-8111-111111111112",
@@ -467,6 +486,8 @@ export const DEMO_LOCATIONS = [
     name: "Engineering Education and Research Center",
     buildingCode: "EER",
     description: "Public engineering building study spaces",
+    kind: "building",
+    parent: null,
   },
   {
     id: "11111111-1111-4111-8111-111111111113",
@@ -474,6 +495,8 @@ export const DEMO_LOCATIONS = [
     name: "Texas Union",
     buildingCode: "UNION",
     description: "Public union study spaces",
+    kind: "building",
+    parent: null,
   },
 ] as const satisfies readonly Location[];
 

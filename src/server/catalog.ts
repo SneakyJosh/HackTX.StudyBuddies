@@ -12,12 +12,20 @@ import { internalError } from "./errors";
  */
 
 type UniversityRow = { id: string; name: string; slug: string };
+type LocationParentRow = {
+  id: string;
+  name: string;
+  building_code: string;
+};
+
 type LocationRow = {
   id: string;
   university_id: string;
   name: string;
   building_code: string;
   description: string | null;
+  kind?: string | null;
+  parent?: LocationParentRow | LocationParentRow[] | null;
 };
 type CourseRow = { id: string; university_id: string; code: string; title: string };
 
@@ -26,12 +34,15 @@ export function mapUniversity(row: UniversityRow): University {
 }
 
 export function mapLocation(row: LocationRow): Location {
+  const parent = Array.isArray(row.parent) ? row.parent[0] ?? null : row.parent ?? null;
   return {
     id: row.id,
     universityId: row.university_id,
     name: row.name,
     buildingCode: row.building_code,
     description: row.description,
+    kind: row.kind === "cafe" ? "cafe" : "building",
+    parent: parent ? { id: parent.id, name: parent.name, buildingCode: parent.building_code } : null,
   };
 }
 
@@ -96,6 +107,23 @@ export async function listLocationsForCaller(
   const universityId = await resolveCallerUniversityId(supabase, userId);
   if (!universityId) {
     return [];
+  }
+
+  const rich = await supabase
+    .from("locations")
+    .select("id, university_id, name, building_code, description, kind, parent:parent_location_id(id, name, building_code)")
+    .eq("university_id", universityId)
+    .eq("is_active", true)
+    .eq("bookable", true)
+    .order("name", { ascending: true });
+
+  if (!rich.error) {
+    return ((rich.data ?? []) as LocationRow[]).map(mapLocation);
+  }
+
+  const missingCatalogColumns = /bookable|parent_location_id|kind/i.test(rich.error.message);
+  if (!missingCatalogColumns) {
+    throw internalError();
   }
 
   const { data, error } = await supabase

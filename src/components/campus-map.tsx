@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getCampusMap, isApiError } from "@/lib/api-client";
 import { filterCampusPlaces, type CampusRankFilter } from "@/lib/campus-rank";
@@ -22,12 +23,14 @@ const CATEGORY_LABELS: Record<CampusCategory, string> = {
   library: "Library",
   academic_center: "Academic center",
   student_hub: "Student hub",
+  cafe: "Coffee shop",
 };
 
 const PIN_CLASS: Record<CampusCategory, string> = {
   library: "border-cool bg-surface text-foreground",
   academic_center: "border-accent-fill bg-accent-soft text-accent-ink",
   student_hub: "border-good bg-surface text-foreground",
+  cafe: "border-[#c47b4a] bg-[#fff4ea] text-[#3a2416]",
 };
 
 const STREETS: { name: string; axis: "x" | "y"; at: number }[] = [
@@ -167,10 +170,10 @@ export function CampusMapBoard() {
         </div>
 
         <div className="grid gap-3">
-          {filter === "coffee" ? (
+          {filter === "coffee" && cards.length === 0 ? (
             <EmptyBlock
               title="No confirmed coffee shop"
-              body="A coffee shop appears here only when a public UT Austin page places it inside one of these buildings."
+              body="A coffee shop appears here only when a public page confirms it as a study location."
             />
           ) : cards.length === 0 ? (
             <EmptyBlock title="No buildings in this filter" body="Try another category to see the curated study buildings." />
@@ -207,11 +210,27 @@ function PlaceDetail({ place }: { place: CampusPlace | null }) {
       <p className="text-xs font-bold tracking-wide text-muted uppercase">{place.abbreviation}</p>
       <h2 className="mt-1 font-display text-xl font-bold">{place.name}</h2>
       <p className="mt-2 text-sm">{CATEGORY_LABELS[place.category]}</p>
+      {place.parent ? <p className="mt-1 text-sm">At {place.parent.name}.</p> : null}
+      {place.detail ? <p className="mt-1 text-sm text-muted">{place.detail}</p> : null}
       <p className="mt-1 text-sm text-muted">
-        {place.bookingAvailable
-          ? "Available for check-in and booking."
-          : "Map only. Check-in and booking stay on PCL, EER, and Texas Union."}
+        {place.bookingAvailable ? "Available for check-in and booking." : "Shown on the map. Check-in and booking are not offered here."}
       </p>
+      {place.bookingAvailable && place.locationId ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            href={`/sessions?studyLocation=${place.locationId}`}
+            className="inline-flex min-h-11 items-center rounded-full bg-[#ff8a1f] px-4 text-sm font-bold text-[#2e1600] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cool"
+          >
+            Study here
+          </Link>
+          <Link
+            href={`/sessions?scheduleLocation=${place.locationId}`}
+            className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-4 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cool"
+          >
+            Schedule a session here
+          </Link>
+        </div>
+      ) : null}
       {place.quietZones.length > 0 ? (
         <div className="mt-3">
           <p className="text-sm font-bold">Quiet zones inside this building</p>

@@ -47,7 +47,7 @@ export function FocusSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  preset?: { courseId: string; locationId: string; durationMinutes: number; groupSession?: GroupSessionRef } | null;
+  preset?: { courseId?: string; locationId: string; durationMinutes?: number; groupSession?: GroupSessionRef } | null;
   onGroupFinished?: (record: StudyRecord) => void;
 }) {
   const demo = useDemo();
@@ -336,7 +336,7 @@ export function FocusSheet({
             </select>
           </label>
           <label className={fieldClass} htmlFor={`${formId}-location`}>
-            Public building
+            Study location
             <select
               id={`${formId}-location`}
               className={inputClass}
@@ -345,7 +345,7 @@ export function FocusSheet({
             >
               {locations.map((location) => (
                 <option key={location.id} value={location.id}>
-                  {location.name} ({location.buildingCode})
+                  {location.parent ? `${location.name} (${location.buildingCode}) · ${location.parent.name}` : `${location.name} (${location.buildingCode})`}
                 </option>
               ))}
             </select>
