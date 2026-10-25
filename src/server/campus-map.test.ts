@@ -3,6 +3,14 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { CAMPUS_PLACE_SCORE, filterCampusPlaces, rankCampusPlaces, type CampusRankPlace } from "../lib/campus-rank.ts";
+import {
+  POSITRON_STYLE_URL,
+  basemapFailure,
+  campusFitBounds,
+  collisionOffsets,
+  placesToFeatures,
+  rememberDeviceFix,
+} from "../lib/campus-map-geo.ts";
 import { parseCampusMapPayload } from "./campus-map-payload.ts";
 import { DEMO_LOCATIONS, MATCH_POINTS } from "#api";
 
@@ -145,6 +153,8 @@ test("the campus map parser keeps schematic fields and drops nothing it does not
   assert.equal(parsed.places[0]?.bookingAvailable, true);
   assert.equal(parsed.places[0]?.category, "library");
   assert.equal(parsed.places[0]?.quietZones.length, 1);
+  assert.equal(parsed.places[0]?.anchorLat, null);
+  assert.equal(parsed.places[0]?.anchorLng, null);
   const mapOnly = parseCampusMapPayload({
     studyStyle: null,
     places: [
@@ -176,6 +186,17 @@ test("the campus map parser rejects coordinates, ratings, occupancy, and a quiet
   const mismatched = payload();
   mismatched.places[0].bookingAvailable = false;
   assert.throws(() => parseCampusMapPayload(mismatched), /Invalid campus map payload/);
+  const anchored = payload();
+  Object.assign(anchored.places[0], { anchorLat: 30.282757, anchorLng: -97.738208 });
+  const parsed = parseCampusMapPayload(anchored);
+  assert.equal(parsed.places[0]?.anchorLat, 30.282757);
+  assert.equal(parsed.places[0]?.anchorLng, -97.738208);
+  const outside = payload();
+  Object.assign(outside.places[0], { anchorLat: 40, anchorLng: -97.738208 });
+  assert.throws(() => parseCampusMapPayload(outside), /Invalid campus map payload/);
+  const half = payload();
+  Object.assign(half.places[0], { anchorLat: 30.282757 });
+  assert.throws(() => parseCampusMapPayload(half), /Invalid campus map payload/);
 });
 
 test("the campus map migration stays map-only and leaves check-in locations alone", () => {
@@ -204,6 +225,7 @@ test("the campus map migration stays map-only and leaves check-in locations alon
   assert.equal(sql.includes("checkin_study_ratings"), false);
   assert.match(sql, /revoke all on public\.campus_places from public, anon, authenticated;/);
   assert.match(sql, /grant execute on function public\.campus_map_payload\(\) to authenticated;/);
+  assert.equal(sql.includes("anchor_lat"), false);
   assert.match(sql, /'UNB'/);
   assert.match(sql, /'PMA'/);
   assert.match(sql, /'WCP'/);
@@ -227,4 +249,76 @@ test("the campus map migration stays map-only and leaves check-in locations alon
   for (const forbidden of ["serpapi", "occupancy", "latitude", "compatibilityScore"]) {
     assert.equal(view.toLowerCase().includes(forbidden), false, forbidden);
   }
+  assert.match(view, /mapX/);
+  assert.match(view, /Try the street map again/);
+});
+
+test("street map anchors stay public building positions and do not carry a device fix", () => {
+  const anchors = placesToFeatures([
+    {
+      id: PCL,
+      name: "Perry-Castañeda Library",
+      abbreviation: "PCL",
+      category: "library",
+      anchorLat: 30.282757,
+      anchorLng: -97.738208,
+    },
+    {
+      id: UNB,
+      name: "Union Building",
+      abbreviation: "UNB",
+      category: "student_hub",
+      anchorLat: 30.28663,
+      anchorLng: -97.74116,
+    },
+  ]);
+  assert.equal(anchors.features.length, 2);
+  assert.deepEqual(anchors.features[0]?.geometry.coordinates, [-97.738208, 30.282757]);
+  assert.equal(JSON.stringify(anchors).includes("historyVisits"), false);
+  const bounds = campusFitBounds(anchors.features.map((feature) => ({
+    anchorLng: feature.geometry.coordinates[0],
+    anchorLat: feature.geometry.coordinates[1],
+  })));
+  assert.equal(bounds[0][0] < bounds[1][0], true);
+  const offsets = collisionOffsets([
+    { id: "a", x: 0, y: 0 },
+    { id: "b", x: 10, y: 8 },
+  ]);
+  const moved = { x: 10 + (offsets.b?.x ?? 0), y: 8 + (offsets.b?.y ?? 0) };
+  assert.equal(Math.hypot(moved.x, moved.y) >= 46, true);
+  assert.equal(rememberDeviceFix(31, -97.74), null);
+  assert.deepEqual(rememberDeviceFix(30.285, -97.738), { north: 30.285, west: -97.738 });
+  assert.equal(basemapFailure(true, "Failed to fetch style"), false);
+  assert.equal(basemapFailure(false, "Failed to fetch style"), true);
+  assert.equal(basemapFailure(false, "Failed to fetch", "https://tiles.openfreemap.org/planet/14/0/0.pbf"), false);
+  assert.equal(basemapFailure(false, "sprite missing"), false);
+  const sql = readFileSync("supabase/migrations/0011_campus_map_anchors.sql", "utf8");
+  const previous = readFileSync("supabase/migrations/0010_campus_map.sql", "utf8");
+  assert.equal(previous.includes("anchor_lat"), false);
+  assert.match(sql, /add column anchor_lat/);
+  assert.match(sql, /place_row\.map_x/);
+  assert.match(sql, /'anchorLat', place_row\.anchor_lat/);
+  assert.match(sql, /attendance_row\.user_id = uid/);
+  assert.match(sql, /record_row\.user_id = uid/);
+  assert.equal(/insert into public\.locations/i.test(sql), false);
+  assert.equal(/alter table public\.locations/i.test(sql), false);
+  assert.equal(sql.includes("discovery_candidates"), false);
+  assert.equal(sql.includes("email"), false);
+  for (const pair of ["30.282757", "-97.738208", "30.286630", "-97.741160", "30.288824", "-97.736097"]) {
+    assert.equal(sql.includes(pair), true, pair);
+  }
+  const canvas = readFileSync("src/components/campus-map-canvas.tsx", "utf8");
+  assert.equal(POSITRON_STYLE_URL, "https://tiles.openfreemap.org/styles/positron");
+  assert.match(canvas, /style: POSITRON_STYLE_URL/);
+  assert.match(canvas, /compact: false/);
+  assert.match(canvas, /Reset to campus/);
+  assert.match(canvas, /getCurrentPosition/);
+  assert.equal(canvas.includes("watchPosition"), false);
+  assert.equal(canvas.includes("localStorage"), false);
+  assert.equal(canvas.includes("getCampusMap"), false);
+  assert.equal(canvas.includes("fetch("), false);
+  assert.match(canvas, /rememberDeviceFix/);
+  const matching = readFileSync("src/server/matching.ts", "utf8");
+  assert.equal(matching.includes("anchor_lat"), false);
+  assert.equal(MATCH_POINTS.sameLocation, 20);
 });

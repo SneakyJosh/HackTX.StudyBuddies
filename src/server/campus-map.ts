@@ -18,6 +18,8 @@ function publicPlace(place: CampusPlace & { sortOrder: number }): CampusPlace {
     bookingAvailable: place.bookingAvailable,
     mapX: place.mapX,
     mapY: place.mapY,
+    anchorLat: place.anchorLat,
+    anchorLng: place.anchorLng,
     quietZones: place.quietZones,
     historyVisits: place.historyVisits,
   };

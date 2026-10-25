@@ -74,6 +74,16 @@ function asPercent(value: unknown): number {
   return value;
 }
 
+function asAnchor(value: unknown, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) badPayload();
+  return value;
+}
+
+function sameKeys(row: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(row);
+  return actual.length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(row, key));
+}
+
 function asCount(value: unknown, max: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > max) badPayload();
   return value;
@@ -89,21 +99,24 @@ function asZone(value: unknown): CampusQuietZone {
   };
 }
 
+const PLACE_KEYS = [
+  "id",
+  "locationId",
+  "name",
+  "abbreviation",
+  "category",
+  "bookingAvailable",
+  "mapX",
+  "mapY",
+  "sortOrder",
+  "quietZones",
+  "historyVisits",
+] as const;
+
 function asPlace(value: unknown): CampusPlaceRecord {
   const row = asRecord(value);
-  exactKeys(row, [
-    "id",
-    "locationId",
-    "name",
-    "abbreviation",
-    "category",
-    "bookingAvailable",
-    "mapX",
-    "mapY",
-    "sortOrder",
-    "quietZones",
-    "historyVisits",
-  ]);
+  const withAnchors = sameKeys(row, [...PLACE_KEYS, "anchorLat", "anchorLng"]);
+  if (!withAnchors && !sameKeys(row, PLACE_KEYS)) badPayload();
   const category = row.category;
   if (typeof category !== "string" || !CATEGORIES.has(category as CampusCategory)) badPayload();
   const abbreviation = asText(row.abbreviation, 6);
@@ -122,6 +135,8 @@ function asPlace(value: unknown): CampusPlaceRecord {
     bookingAvailable,
     mapX: asPercent(row.mapX),
     mapY: asPercent(row.mapY),
+    anchorLat: withAnchors ? asAnchor(row.anchorLat, 30.27, 30.3) : null,
+    anchorLng: withAnchors ? asAnchor(row.anchorLng, -97.75, -97.72) : null,
     sortOrder: asCount(row.sortOrder, 1000),
     quietZones,
     historyVisits: asCount(row.historyVisits, 1000),

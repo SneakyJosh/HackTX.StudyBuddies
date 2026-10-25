@@ -140,7 +140,11 @@ export type CampusQuietZone = {
   detail: string;
 };
 
-/** Illustrated map place. mapX and mapY are schematic percentages, not GPS. */
+/**
+ * Illustrated map place. mapX and mapY are schematic percentages.
+ * anchorLat and anchorLng are a public building position for the street map.
+ * They are absent until that column exists, and they are never a student position.
+ */
 export type CampusPlace = {
   id: string;
   locationId: string | null;
@@ -150,6 +154,8 @@ export type CampusPlace = {
   bookingAvailable: boolean;
   mapX: number;
   mapY: number;
+  anchorLat: number | null;
+  anchorLng: number | null;
   quietZones: CampusQuietZone[];
   historyVisits: number;
 };
