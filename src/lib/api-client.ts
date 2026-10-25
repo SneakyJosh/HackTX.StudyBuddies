@@ -24,6 +24,7 @@ import type {
   PostStudyRatingBody,
   ScheduledSession,
   SessionWhen,
+  StudyingConnection,
   StudyRecord,
   StudyRequest,
   StudyStats,
@@ -31,7 +32,7 @@ import type {
 } from "@/types/api";
 
 /**
- * Live StudySync client. Calls the same-origin API with the Supabase session
+ * Live StudyBuddy client. Calls the same-origin API with the Supabase session
  * cookie. Discovery scores and order come from the server unchanged.
  */
 
@@ -88,7 +89,7 @@ async function request<T>(path: string, init?: { method?: string; body?: unknown
     }
     return parsed as T;
   } catch {
-    return apiError("INTERNAL_ERROR", "The request could not reach StudySync.");
+    return apiError("INTERNAL_ERROR", "The request could not reach StudyBuddy.");
   }
 }
 
@@ -140,6 +141,10 @@ export async function postFinishCheckin(checkinId: string): Promise<ApiData<Chec
 
 export async function getCheckinHistory(): Promise<ApiList<CheckinStudyRecord> | ApiError> {
   return request<ApiList<CheckinStudyRecord>>("/api/checkin/history");
+}
+
+export async function getStudyingConnections(): Promise<ApiList<StudyingConnection> | ApiError> {
+  return request<ApiList<StudyingConnection>>("/api/connections/studying");
 }
 
 export async function getDiscovery(

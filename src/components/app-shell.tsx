@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 py-6 lg:px-10">
           <header className="flex items-center gap-3">
             <BrandMark size={44} />
-            <p className="font-display text-2xl font-extrabold">StudySync</p>
+            <p className="font-display text-2xl font-extrabold">StudyBuddy</p>
           </header>
           <div className="flex flex-1 items-center justify-center py-8">
             {demo.ready ? (
@@ -125,7 +125,7 @@ function SignedInShell({
           <div className="flex items-center gap-3 px-5 pt-6 pb-5">
             <BrandMark size={48} />
             <div>
-              <p className="font-display text-[1.65rem] leading-none font-extrabold">StudySync</p>
+              <p className="font-display text-[1.65rem] leading-none font-extrabold">StudyBuddy</p>
               <p className="mt-1 text-xs font-semibold text-muted">Campus study partners</p>
             </div>
           </div>
@@ -156,9 +156,9 @@ function SignedInShell({
         <div className="flex min-h-dvh min-w-0 flex-col">
           <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-background/95 px-4 py-3 backdrop-blur-sm lg:px-8">
             <div className="min-w-0">
-              <p className="font-display text-xl leading-none font-extrabold lg:hidden">StudySync</p>
+              <p className="font-display text-xl leading-none font-extrabold lg:hidden">StudyBuddy</p>
               <p className="font-display hidden text-2xl leading-none font-extrabold lg:block">
-                {currentTab?.label ?? "StudySync"}
+                {currentTab?.label ?? "StudyBuddy"}
               </p>
               <p className="mt-1 hidden text-sm text-muted lg:block">Public buildings only. No precise location.</p>
             </div>

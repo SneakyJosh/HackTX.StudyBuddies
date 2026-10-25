@@ -49,7 +49,7 @@ export function labelForEmail(value: string | null): string | null {
 
 export async function signInWithPassword(nextEmail: string, password: string): Promise<string | null> {
   const supabase = getBrowserSupabase();
-  if (!supabase) return "StudySync is missing its public Supabase configuration.";
+  if (!supabase) return "StudyBuddy is missing its public Supabase configuration.";
   const { data, error } = await supabase.auth.signInWithPassword({
     email: nextEmail.trim(),
     password,

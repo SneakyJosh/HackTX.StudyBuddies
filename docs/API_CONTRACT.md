@@ -45,6 +45,7 @@ type Checkin = { id: string; locationId: string; courseId: string; availability:
 type CheckinStudyRecord = { id: string; checkinId: string; course: Course; location: PublicLocation; studyStyle: StudyStyle; availability: Availability; startedAt: string; finishedAt: string; creditedMinutes: number; countsTowardStats: boolean; campusDate: string; recordedAt: string; selfReported: true };
 type DiscoveryUser = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
 type DiscoveryMatch = { user: DiscoveryUser; location: PublicLocation; course: Course; availability: Availability; compatibilityScore: number; reasons: MatchReason[]; checkinExpiresAt: string; requestStatus: RequestStatus | null };
+type StudyingConnection = { user: DiscoveryUser; location: PublicLocation; course: Course; availability: 'available' | 'questions_only' };
 type RequestCounterpart = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
 type StudyRequest = { id: string; senderId: string; recipientId: string; status: RequestStatus; createdAt: string; updatedAt: string; counterpart: RequestCounterpart; course: Course | null; location: PublicLocation | null };
 type Block = { blockedUserId: string; displayName: string | null; createdAt: string };
@@ -91,6 +92,7 @@ Check-in `courseId` must be one of the caller's `courseIds`. Check-in `locationI
 | POST | `/api/checkin/:id/finish` | yes | Save a personal study record and check out |
 | GET | `/api/checkin/history` | yes | The caller's finished personal study sessions |
 | GET | `/api/discovery` | yes | Discover same-campus active matches |
+| GET | `/api/connections/studying` | yes | Accepted study partners who are currently discoverable |
 | GET | `/api/requests` | yes | Current user's incoming and outgoing requests |
 | POST | `/api/requests` | yes | Send a request |
 | PATCH | `/api/requests/:id` | yes | Accept, decline, or cancel a request |
@@ -156,6 +158,11 @@ Include a student only when all of these hold:
 `requestStatus` is the latest `study_requests` row between the pair in either direction, or `null` when none exists.
 
 `location` is building-level only. Do not return email, auth ids beyond the profile id, GPS, schedules, the profile's preferred duration, or the profile's group size. Those last two affect the score and reasons only.
+
+The displayed percentage is `compatibilityScore`. The strongest reason is the highest-point reason in `reasons`. When two reasons have the same points, the earlier reason in that array wins. A score of 0 has no reason. This list stays on Matching v1. It does not add a second score.
+
+### GET `/api/connections/studying`
+Returns `{ "data": StudyingConnection[], "meta": { "count": number } }`, ordered by display name, then profile id. A student appears only when an `accepted` study request exists with the caller in either direction and the same discovery rules hold: same university, `visible` profile, a live check-in (`checked_out_at` is null, `started_at` has passed, and `expires_at` is still in the future), availability `available` or `questions_only`, an active building, and no block in either direction. Focused, expired, checked-out, hidden, and other-campus students are omitted. A check-in that is only inside the finish grace period is not live and is omitted. The payload is public name, check-in study style, course, building name, and building abbreviation. It has no email, coordinates, ratings, or compatibility score.
 
 ### GET `/api/requests?direction=incoming|outgoing|all`
 Default `all`. Response `{ "data": StudyRequest[], "meta": { "count": number } }`. Only requests involving the caller. Omit any request whose other participant is blocked in either direction.

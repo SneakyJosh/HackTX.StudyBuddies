@@ -17,8 +17,8 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   title: {
-    default: "StudySync",
-    template: "%s · StudySync",
+    default: "StudyBuddy",
+    template: "%s · StudyBuddy",
   },
   description: "Find a study partner at a public campus building.",
 };

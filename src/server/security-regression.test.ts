@@ -337,3 +337,42 @@ test("personal check-in study records are private and do not complete bookings",
   assert.equal(matching.includes("checkin_study_records"), false);
   assert.equal(matching.includes("streak"), false);
 });
+
+test("studying connections reuse discovery visibility and do not score friends", () => {
+  const migration = readFileSync("supabase/migrations/0008_studying_connections.sql", "utf8");
+  const earlier = [
+    "0001_studysync.sql",
+    "0002_fix_pair_lock_least_greatest.sql",
+    "0003_study_sessions.sql",
+    "0004_fix_create_session_column_ambiguity.sql",
+    "0005_study_history.sql",
+    "0006_study_time_streak_days.sql",
+    "0007_checkin_study_records.sql",
+  ];
+  for (const file of earlier) {
+    assert.equal(readFileSync(`supabase/migrations/${file}`, "utf8").includes("list_studying_connections"), false, file);
+  }
+  assert.match(migration, /sr\.status = 'accepted'/);
+  assert.match(migration, /other\.visible/);
+  assert.match(migration, /other\.university_id = caller\.university_id/);
+  assert.match(migration, /ch\.availability in \('available', 'questions_only'\)/);
+  assert.match(migration, /c\.checked_out_at is null/);
+  assert.match(migration, /c\.started_at <= pg_catalog\.clock_timestamp\(\)/);
+  assert.match(migration, /c\.expires_at > pg_catalog\.clock_timestamp\(\)/);
+  assert.match(migration, /loc\.is_active/);
+  assert.match(migration, /from public\.blocks b/);
+  assert.match(migration, /if uid is null then/);
+  assert.equal(migration.includes("interval '2 hours'"), false);
+  assert.equal(migration.includes("email"), false);
+  assert.equal(migration.includes("latitude"), false);
+  assert.equal(migration.includes("compatibilityScore"), false);
+  assert.equal(migration.includes("discovery_candidates"), false);
+  assert.equal(/drop table/i.test(migration), false);
+  assert.match(migration, /grant execute on function public\.list_studying_connections\(\) to authenticated;/);
+  const feed = readFileSync("src/components/discovery-feed.tsx", "utf8");
+  assert.equal(feed.includes(".sort("), false);
+  assert.equal(feed.includes("rankDiscoveryCandidates"), false);
+  const matching = readFileSync("src/server/matching.ts", "utf8");
+  assert.match(matching, /export function scoreMatch/);
+  assert.match(readFileSync("src/types/api.ts", "utf8"), /sameActiveCourse: 40/);
+});

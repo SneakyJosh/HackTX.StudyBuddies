@@ -1,6 +1,7 @@
 "use client";
 
 import type { DiscoveryMatch } from "@/types/api";
+import { strongestReason } from "@/lib/match-reason";
 import { AVAILABILITY_LABELS, STUDY_STYLE_LABELS, formatPersonMeta } from "@/lib/labels";
 import { Button, LinkButton, cardClass } from "@/components/ui";
 
@@ -33,6 +34,7 @@ export function ProfileCard({
   onOpen?: () => void;
 }) {
   const { user, course, location, availability, compatibilityScore, reasons, requestStatus } = match;
+  const leadReason = strongestReason(reasons);
   return (
     <article className={cardClass + " flex h-full flex-col"}>
       <div className="flex items-start gap-3">
@@ -63,15 +65,11 @@ export function ProfileCard({
       <p className="mt-2 text-sm">
         {AVAILABILITY_LABELS[availability]} · {STUDY_STYLE_LABELS[user.studyStyle]} check-in
       </p>
-      {reasons.length > 0 ? (
-        <ul aria-label="Match reasons" className="mt-4 flex flex-wrap gap-2">
-          {reasons.map((reason) => (
-            <li key={reason} className="rounded-full bg-surface-muted px-3 py-1 text-[13px] leading-5 font-semibold">
-              {reason}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {leadReason ? (
+        <p className="mt-4 text-sm font-bold text-accent">{leadReason}</p>
+      ) : (
+        <p className="mt-4 text-sm text-muted">A score of 0 has no explanation.</p>
+      )}
       <div className="mt-4 flex flex-wrap gap-2">
         {onOpen ? (
           <Button variant="secondary" onClick={onOpen}>
@@ -86,7 +84,7 @@ export function ProfileCard({
           <p className="text-sm font-semibold text-accent">Connected</p>
         ) : (
           <Button disabled={sending} onClick={() => onRequest(user.id)}>
-            {sending ? "Sending…" : "Send request"}
+            {sending ? "Sending…" : "Request to study"}
           </Button>
         )}
         {error ? (

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MATCH_REASONS } from "#api";
+import { strongestReason } from "../lib/match-reason.ts";
 import { rankDiscoveryCandidates, scoreMatch, type DiscoveryCandidate, type MatchPerson } from "./matching.ts";
 
 const PCL = "11111111-1111-4111-8111-111111111111";
@@ -121,4 +122,22 @@ test("focused check-ins are excluded by the matcher", () => {
   const ranked = rankDiscoveryCandidates(caller(), [focused, visible]);
   assert.deepEqual(ranked.map((item) => item.userId), [LOW_ID]);
   assert.equal(ranked[0]?.compatibilityScore, 0);
+});
+
+test("the strongest reason is the highest-point server reason and does not change the score", () => {
+  const scored = scoreMatch(caller(), candidate());
+  assert.equal(scored.compatibilityScore, 100);
+  assert.equal(strongestReason(scored.reasons), MATCH_REASONS.sameActiveCourse);
+  const styleOnly = scoreMatch(
+    caller({ courseIds: [BIO], checkin: { courseId: BIO, locationId: EER, studyStyle: "quiet" } }),
+    candidate({
+      courseIds: [M408C],
+      preferredDurationMinutes: 30,
+      preferredGroupSize: 1,
+      checkin: { courseId: M408C, locationId: PCL, studyStyle: "quiet" },
+    }),
+  );
+  assert.equal(styleOnly.compatibilityScore, 20);
+  assert.equal(strongestReason(styleOnly.reasons), MATCH_REASONS.studyStyle);
+  assert.equal(strongestReason([]), null);
 });

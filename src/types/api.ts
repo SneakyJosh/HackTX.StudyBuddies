@@ -160,6 +160,14 @@ export type DiscoveryUser = {
   studyStyle: StudyStyle;
 };
 
+/** An accepted study partner who is currently discoverable. No score and no private fields. */
+export type StudyingConnection = {
+  user: DiscoveryUser;
+  location: PublicLocation;
+  course: Course;
+  availability: "available" | "questions_only";
+};
+
 export type DiscoveryMatch = {
   user: DiscoveryUser;
   location: PublicLocation;

@@ -453,7 +453,7 @@ export default function DevAuthTestClient() {
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-12 font-sans">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          StudySync dev auth test
+          StudyBuddy dev auth test
         </h1>
         <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
           Development only — this route returns 404 in production. It drives the real API through
