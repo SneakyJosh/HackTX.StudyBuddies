@@ -22,7 +22,7 @@ import { useDemo } from "@/components/demo-provider";
 import { FocusSheet } from "@/components/focus-sheet";
 import { RatingSheet, SessionHistory } from "@/components/session-history";
 import { ScheduleSheet } from "@/components/schedule-sheet";
-import { Button, EmptyBlock, ErrorBlock, LoadingBlock, cardClass } from "@/components/ui";
+import { Button, EmptyBlock, ErrorBlock, LinkButton, LoadingBlock, cardClass } from "@/components/ui";
 
 export function SessionsBoard() {
   const demo = useDemo();
@@ -144,6 +144,9 @@ export function SessionsBoard() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <LinkButton href="/map" variant="secondary">
+            Campus map
+          </LinkButton>
           <Button variant="secondary" onClick={() => setFocusOpen(true)}>
             {checkin ? "Open timer" : "Focus now"}
           </Button>

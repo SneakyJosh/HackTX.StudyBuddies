@@ -83,6 +83,7 @@ Check-in `courseId` must be one of the caller's `courseIds`. Check-in `locationI
 |---|---|---|---|
 | GET | `/api/universities` | yes | Campuses the caller may join. Works before a profile exists |
 | GET | `/api/locations` | yes | Predefined locations for the caller's university |
+| GET | `/api/campus-map` | yes | Curated illustrated campus catalog and ranked study spots |
 | GET | `/api/courses` | yes | Courses for the caller's university; optional `q` filter |
 | GET | `/api/profile` | yes | Current user's profile |
 | PUT | `/api/profile` | yes | Create or replace the current user's profile |
@@ -109,7 +110,20 @@ There is no custom sign-in route. Email sign-up and sign-in use the Supabase Aut
 Auth required. A profile is not required. Response `{ "data": University[], "meta": { "count": number } }`. The Milestone 0 seed contains one campus, UT Austin. The client uses this id in `PUT /api/profile`.
 
 ### GET `/api/locations`
-Returns `{ "data": Location[], "meta": { "count": number } }`. When the caller has a profile, return that profile's university. When the profile is `null`, return the sole configured university. `description` is a short public building blurb and must not name a room, desk, or coordinate. Inactive locations are omitted.
+Returns `{ "data": Location[], "meta": { "count": number } }`. When the caller has a profile, return that profile's university. When the profile is `null`, return the sole configured university. `description` is a short public building blurb and must not name a room, desk, or coordinate. Inactive locations are omitted. This list stays the check-in and booking picker. Campus-map buildings are not added here.
+
+### GET `/api/campus-map`
+Auth required. No query parameters. Returns `{ "data": CampusMap }`.
+
+`CampusMap` is `{ studyStyle, places, suggestions }`. `studyStyle` is the caller's profile style, or `null` before a profile exists. `places` is the active curated catalog for the caller's university (or the sole university when there is no profile). `suggestions` ranks every returned place.
+
+`CampusPlace` fields: `id`, `locationId` or `null`, `name`, `abbreviation`, `category` (`library`, `academic_center`, or `student_hub`), `bookingAvailable`, `mapX`, `mapY`, `quietZones`, `historyVisits`. `mapX` and `mapY` are schematic percentages on an illustrated campus, from 0 to 100. They are not GPS. `bookingAvailable` is true only when `locationId` points at an existing check-in location. In the phase 1 seed that is only PCL, EER, and Texas Union. Other buildings are map-only and must not appear in `GET /api/locations`.
+
+`quietZones` names specific floors or rooms. A building with a zone is not quiet-only. `historyVisits` counts the caller's own completed bookings and finished personal check-ins at that `locationId`. Map-only places stay at 0.
+
+`CampusSuggestion` is `{ placeId, placeScore, reasons }`. `placeScore` is separate from `compatibilityScore` and does not change discovery. Reasons may name a verified quiet zone, a study-style match, or the caller's own finished visit. The payload has no email, GPS, occupancy, noise score, environment rating, or another student's location.
+
+The page filters this payload. Coffee is an empty state until a public UT Austin page confirms a shop inside a catalog building. Unknown query parameters are a validation error.
 
 ### GET `/api/courses?q=M408`
 Returns `{ "data": Course[], "meta": { "count": number } }` for the same university selection rule as locations. `q` is an optional case-insensitive substring on `code` or `title`.
@@ -229,6 +243,8 @@ Because scores move in steps of 5, a same-location student outranks another stud
 ## Database schema (PostgreSQL / Supabase)
 - `universities`: `id uuid pk`, `name text`, `slug text unique`.
 - `locations`: `id uuid pk`, `university_id uuid fk`, `name text`, `building_code text`, `description text`, `is_active boolean`.
+- `campus_places`: `id uuid pk`, `university_id uuid fk`, `location_id uuid fk nullable`, `name text`, `abbreviation text`, `category text`, `map_x numeric`, `map_y numeric`, `sort_order integer`, `is_active boolean`. `location_id` is set only for buildings that already exist in `locations`.
+- `campus_quiet_zones`: `id uuid pk`, `place_id uuid fk`, `name text`, `detail text`, `sort_order integer`. A zone is part of a building.
 - `courses`: `id uuid pk`, `university_id uuid fk`, `code text`, `title text`, unique (`university_id`, `code`).
 - `profiles`: `id uuid pk references auth.users(id)`, `university_id uuid fk`, `display_name text`, `major text nullable`, `academic_year text nullable`, `study_style text`, `preferred_duration_minutes integer`, `preferred_group_size integer`, `visible boolean default false`, `created_at timestamptz`, `updated_at timestamptz`.
 - `profile_courses`: `user_id uuid fk`, `course_id uuid fk`, primary key (`user_id`, `course_id`).

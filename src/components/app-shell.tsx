@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <main className="panel-shadow grid w-full max-w-xl gap-4 rounded-[28px] border border-line bg-background p-6 sm:p-8">
                 <h1 className="font-display text-3xl font-extrabold">Sign in required</h1>
                 <p className="text-[15px] leading-6 text-muted">
-                  Home, Connect, Sessions, and Profile stay private until you sign in.
+                  Home, Connect, Sessions, Profile, and the campus map stay private until you sign in.
                 </p>
                 <LinkButton href="/" className="w-full sm:w-auto">
                   Sign in

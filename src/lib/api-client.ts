@@ -4,6 +4,7 @@ import type {
   ApiError,
   ApiErrorCode,
   ApiList,
+  CampusMap,
   Checkin,
   CheckinStudyRecord,
   PostCheckinRatingBody,
@@ -105,6 +106,10 @@ export async function getUniversities(): Promise<ApiList<University> | ApiError>
 
 export async function getLocations(): Promise<ApiList<Location> | ApiError> {
   return request<ApiList<Location>>("/api/locations");
+}
+
+export async function getCampusMap(): Promise<ApiData<CampusMap> | ApiError> {
+  return request<ApiData<CampusMap>>("/api/campus-map");
 }
 
 export async function getCourses(query?: string): Promise<ApiList<Course> | ApiError> {

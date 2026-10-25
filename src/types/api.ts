@@ -132,6 +132,41 @@ export type Location = {
 /** Building-level public place. No description, room, desk, or coordinates. */
 export type PublicLocation = Pick<Location, "id" | "name" | "buildingCode">;
 
+export type CampusCategory = "library" | "academic_center" | "student_hub";
+
+export type CampusQuietZone = {
+  id: string;
+  name: string;
+  detail: string;
+};
+
+/** Illustrated map place. mapX and mapY are schematic percentages, not GPS. */
+export type CampusPlace = {
+  id: string;
+  locationId: string | null;
+  name: string;
+  abbreviation: string;
+  category: CampusCategory;
+  bookingAvailable: boolean;
+  mapX: number;
+  mapY: number;
+  quietZones: CampusQuietZone[];
+  historyVisits: number;
+};
+
+/** Rank for the campus list. This is not compatibilityScore. */
+export type CampusSuggestion = {
+  placeId: string;
+  placeScore: number;
+  reasons: string[];
+};
+
+export type CampusMap = {
+  studyStyle: StudyStyle | null;
+  places: CampusPlace[];
+  suggestions: CampusSuggestion[];
+};
+
 export type Course = {
   id: string;
   universityId: string;

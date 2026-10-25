@@ -36,7 +36,8 @@ type AppHref =
   | "/profile"
   | "/discover"
   | "/check-in"
-  | "/requests";
+  | "/requests"
+  | "/map";
 
 export function LinkButton({
   href,

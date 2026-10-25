@@ -17,6 +17,7 @@ const shellScreens = [
   "src/components/open-sessions.tsx",
   "src/components/study-stats-card.tsx",
   "src/components/session-history.tsx",
+  "src/components/campus-map.tsx",
 ];
 
 test("BrandMark is exported from its own module and imported by name", () => {
