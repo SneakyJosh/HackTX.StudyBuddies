@@ -6,8 +6,8 @@ import { CAMPUS_PLACE_SCORE, filterCampusPlaces, rankCampusPlaces, type CampusRa
 import {
   POSITRON_STYLE_URL,
   basemapFailure,
+  anchoredMarkers,
   campusFitBounds,
-  collisionOffsets,
   placesToFeatures,
   rememberDeviceFix,
 } from "../lib/campus-map-geo.ts";
@@ -291,12 +291,21 @@ test("street map anchors stay public building positions and do not carry a devic
     anchorLat: feature.geometry.coordinates[1],
   })));
   assert.equal(bounds[0][0] < bounds[1][0], true);
-  const offsets = collisionOffsets([
-    { id: "a", x: 0, y: 0 },
-    { id: "b", x: 10, y: 8 },
+  const wel = { id: "wel", anchorLng: -97.737486, anchorLat: 30.286423 };
+  const cafe = { id: "uaa", anchorLng: -97.737486, anchorLat: 30.286423 };
+  const apart = anchoredMarkers(
+    [
+      { id: PCL, anchorLng: -97.738208, anchorLat: 30.282757 },
+      wel,
+      cafe,
+    ],
+    new Set([PCL]),
+  );
+  assert.deepEqual(apart, [
+    { id: "wel", lng: wel.anchorLng, lat: wel.anchorLat },
+    { id: "uaa", lng: cafe.anchorLng, lat: cafe.anchorLat },
   ]);
-  const moved = { x: 10 + (offsets.b?.x ?? 0), y: 8 + (offsets.b?.y ?? 0) };
-  assert.equal(Math.hypot(moved.x, moved.y) >= 46, true);
+  assert.deepEqual(anchoredMarkers([wel, cafe], new Set()), anchoredMarkers([wel, cafe], new Set()));
   assert.equal(rememberDeviceFix(31, -97.74), null);
   assert.deepEqual(rememberDeviceFix(30.285, -97.738), { north: 30.285, west: -97.738 });
   assert.equal(basemapFailure(true, "Failed to fetch style"), false);
@@ -329,6 +338,12 @@ test("street map anchors stay public building positions and do not carry a devic
   assert.equal(canvas.includes("getCampusMap"), false);
   assert.equal(canvas.includes("fetch("), false);
   assert.match(canvas, /rememberDeviceFix/);
+  assert.match(canvas, /anchoredMarkers/);
+  assert.match(canvas, /maplibregl-marker/);
+  assert.match(canvas, /anchorLng/);
+  assert.equal(canvas.includes("collisionOffsets"), false);
+  assert.equal(canvas.includes("setOffset"), false);
+  assert.equal(canvas.includes(".project("), false);
   const matching = readFileSync("src/server/matching.ts", "utf8");
   assert.equal(matching.includes("anchor_lat"), false);
   assert.equal(MATCH_POINTS.sameLocation, 20);

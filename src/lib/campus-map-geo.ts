@@ -75,31 +75,17 @@ export function campusFitBounds(
   ];
 }
 
-export function collisionOffsets(
-  points: readonly { id: string; x: number; y: number }[],
-  gap = 46,
-): Record<string, { x: number; y: number }> {
-  const placed: { x: number; y: number }[] = [];
-  const offsets: Record<string, { x: number; y: number }> = {};
-  const ordered = [...points].sort((left, right) => left.x - right.x || left.y - right.y || (left.id < right.id ? -1 : 1));
-  for (const point of ordered) {
-    let chosen = { x: 0, y: 0 };
-    for (let step = 0; step < 12; step += 1) {
-      const angle = (step * Math.PI) / 6;
-      const distance = step === 0 ? 0 : gap;
-      const candidate = { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance };
-      const nextX = point.x + candidate.x;
-      const nextY = point.y + candidate.y;
-      const clear = placed.every((item) => Math.hypot(item.x - nextX, item.y - nextY) >= gap);
-      if (clear) {
-        chosen = candidate;
-        break;
-      }
-    }
-    placed.push({ x: point.x + chosen.x, y: point.y + chosen.y });
-    offsets[point.id] = { x: Math.round(chosen.x), y: Math.round(chosen.y) };
-  }
-  return offsets;
+/**
+ * Screen markers use these coordinates directly. Zoom, pan, and overlap
+ * never change them. Clustered ids stay in the cluster layer.
+ */
+export function anchoredMarkers(
+  places: readonly { id: string; anchorLng: number; anchorLat: number }[],
+  clusteredIds: ReadonlySet<string>,
+): { id: string; lng: number; lat: number }[] {
+  return places
+    .filter((place) => !clusteredIds.has(place.id))
+    .map((place) => ({ id: place.id, lng: place.anchorLng, lat: place.anchorLat }));
 }
 
 export function rememberDeviceFix(north: number, west: number): { north: number; west: number } | null {

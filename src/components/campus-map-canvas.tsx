@@ -10,8 +10,8 @@ import {
   CAMPUS_MAX_BOUNDS,
   POSITRON_STYLE_URL,
   basemapFailure,
+  anchoredMarkers,
   campusFitBounds,
-  collisionOffsets,
   placesToFeatures,
   rememberDeviceFix,
   type CampusAnchor,
@@ -199,6 +199,7 @@ export function CampusMapCanvas({ places, selectedId, focusToken, onSelect, onUn
   useEffect(() => {
     for (const [id, entry] of markersRef.current) {
       paintPin(entry.button, places.find((place) => place.id === id), id === selectedId);
+      entry.marker.getElement().style.zIndex = id === selectedId ? "3" : "1";
     }
   }, [places, selectedId]);
 
@@ -271,43 +272,41 @@ export function CampusMapCanvas({ places, selectedId, focusToken, onSelect, onUn
 
   function syncMarkers(map: MapLibreMap, MarkerType: typeof Marker) {
     if (!map.isStyleLoaded() || !map.getSource("places")) return;
-    const features = map.querySourceFeatures("places").filter((feature) => !feature.properties?.point_count && feature.geometry.type === "Point");
-    const seen = new Set<string>();
-    const projected: { id: string; x: number; y: number; lng: number; lat: number }[] = [];
-    for (const feature of features) {
+    const clusteredIds = new Set(placesRef.current.map((place) => place.id));
+    for (const feature of map.querySourceFeatures("places")) {
+      if (feature.properties?.point_count) continue;
       const id = String(feature.properties?.id ?? "");
-      if (!id || seen.has(id) || feature.geometry.type !== "Point") continue;
-      seen.add(id);
-      const [lng, lat] = feature.geometry.coordinates as [number, number];
-      const point = map.project([lng, lat]);
-      projected.push({ id, x: point.x, y: point.y, lng, lat });
+      if (id) clusteredIds.delete(id);
     }
-    const offsets = collisionOffsets(projected);
+    const revealed = clusteredIds.size < placesRef.current.length;
+    if (!revealed && placesRef.current.length > 0 && map.isMoving()) return;
+    const visible = new Set(anchoredMarkers(placesRef.current, clusteredIds).map((place) => place.id));
     for (const [id, entry] of markersRef.current) {
-      if (!seen.has(id)) {
+      if (!visible.has(id)) {
         entry.marker.remove();
         markersRef.current.delete(id);
       }
     }
-    for (const point of projected) {
-      const place = placesRef.current.find((item) => item.id === point.id);
-      if (!place) continue;
-      const offset = offsets[point.id] ?? { x: 0, y: 0 };
-      const existing = markersRef.current.get(point.id);
-      if (existing) {
-        existing.marker.setLngLat([point.lng, point.lat]).setOffset([offset.x, offset.y]);
-        paintPin(existing.button, place, selectedRef.current === point.id);
-        continue;
-      }
+    for (const place of anchoredMarkers(placesRef.current, clusteredIds)) {
+      const sourcePlace = placesRef.current.find((item) => item.id === place.id);
+      if (!sourcePlace) continue;
+      const existing = markersRef.current.get(place.id);
+      if (existing) continue;
       const button = document.createElement("button");
       button.type = "button";
-      paintPin(button, place, selectedRef.current === point.id);
+      button.style.position = "absolute";
+      button.style.top = "0";
+      button.style.left = "0";
+      button.style.zIndex = selectedRef.current === place.id ? "3" : "1";
+      paintPin(button, sourcePlace, selectedRef.current === place.id);
       button.addEventListener("click", (event) => {
         event.stopPropagation();
-        onSelectRef.current(point.id);
+        onSelectRef.current(place.id);
       });
-      const marker = new MarkerType({ element: button, anchor: "center" }).setLngLat([point.lng, point.lat]).setOffset([offset.x, offset.y]).addTo(map);
-      markersRef.current.set(point.id, { marker, button });
+      const marker = new MarkerType({ element: button, anchor: "center" })
+        .setLngLat([place.lng, place.lat])
+        .addTo(map);
+      markersRef.current.set(place.id, { marker, button });
     }
   }
 }
@@ -319,7 +318,7 @@ function isClusterSource(source: unknown): source is GeoJSONSource {
 function paintPin(button: HTMLButtonElement, place: CampusAnchor | undefined, selected: boolean) {
   if (!place) return;
   button.className = [
-    "inline-flex min-h-11 min-w-11 items-center gap-1 rounded-full border-2 px-2 text-xs font-extrabold shadow-[0_6px_16px_rgba(16,48,74,0.18)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b9be0]",
+    "maplibregl-marker inline-flex min-h-11 min-w-11 items-center gap-1 rounded-full border-2 px-2 text-xs font-extrabold shadow-[0_6px_16px_rgba(16,48,74,0.18)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2b9be0]",
     PIN_TONE[place.category],
     selected ? "ring-4 ring-[#ff8a1f]" : "",
   ].join(" ");
