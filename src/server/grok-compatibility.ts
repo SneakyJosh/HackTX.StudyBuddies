@@ -3,10 +3,22 @@ import type { Course, DiscoveryMatch, GrokCompatibility, Profile } from "#api";
 const GROK_URL = "https://api.x.ai/v1/responses";
 const GROK_MODEL = "grok-4.7";
 const GROK_LIMIT = 5;
-const GROK_TIMEOUT_MS = 8000;
+export const GROK_TIMEOUT_MS = 15_000;
+export const GROK_MAX_OUTPUT_TOKENS = 1200;
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 6;
 const CACHE_MS = 10 * 60_000;
+
+export type GrokFailureKind = "missing_key" | "http_error" | "timeout" | "invalid_json" | "request_failed";
+
+/** Logs a failure category only. Callers must not pass keys, prompts, or response text. */
+export function reportGrokFailure(kind: GrokFailureKind, status?: number): void {
+  if (kind === "http_error") {
+    console.error(`grok compatibility failed: http_error status=${status ?? 0}`);
+    return;
+  }
+  console.error(`grok compatibility failed: ${kind}`);
+}
 
 export type GrokFacts = {
   slot: string;
@@ -49,6 +61,7 @@ export function readGrokOutputText(body: unknown): string | null {
   const parts: string[] = [];
   for (const item of record.output) {
     if (!item || typeof item !== "object") continue;
+    if ((item as { type?: unknown }).type === "reasoning") continue;
     const content = (item as { content?: unknown }).content;
     if (typeof content === "string") parts.push(content);
     if (!Array.isArray(content)) continue;
@@ -167,6 +180,18 @@ export function applyGrokText(
   });
 }
 
+function alignedCache(matches: readonly DiscoveryMatch[], rows: readonly GrokCompatibility[]): GrokCompatibility[] | null {
+  if (rows.length !== matches.length) return null;
+  const aligned: GrokCompatibility[] = [];
+  for (let index = 0; index < matches.length; index += 1) {
+    const row = rows[index];
+    const match = matches[index];
+    if (!row || !match || row.userId !== match.user.id) return null;
+    aligned.push(row);
+  }
+  return aligned;
+}
+
 function cacheKey(userId: string, locationId: string | null, courseId: string | null, matches: readonly DiscoveryMatch[]): string {
   const people = matches.map((match) => [match.user.id, match.course.code, match.location.name, match.user.studyStyle, match.compatibilityScore].join(":")).join("|");
   return [userId, locationId ?? "", courseId ?? "", people].join("~");
@@ -177,7 +202,10 @@ export async function requestGrokText(
   apiKey: string | undefined,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
-  if (!apiKey) return null;
+  if (!apiKey) {
+    reportGrokFailure("missing_key");
+    return null;
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GROK_TIMEOUT_MS);
   try {
@@ -188,7 +216,7 @@ export async function requestGrokText(
       body: JSON.stringify({
         model: GROK_MODEL,
         store: false,
-        max_output_tokens: 300,
+        max_output_tokens: GROK_MAX_OUTPUT_TOKENS,
         reasoning: { effort: "low" },
         input: [
           { role: "system", content: "You compare anonymous study preferences and return JSON only." },
@@ -196,9 +224,21 @@ export async function requestGrokText(
         ],
       }),
     });
-    if (!response.ok) return null;
-    return readGrokOutputText(await response.json());
-  } catch {
+    if (!response.ok) {
+      reportGrokFailure("http_error", response.status);
+      return null;
+    }
+    const body: unknown = await response.json();
+    const status = body && typeof body === "object" ? (body as { status?: unknown }).status : null;
+    const text = readGrokOutputText(body);
+    if (status === "incomplete" || !text) {
+      reportGrokFailure("invalid_json");
+      return null;
+    }
+    return text;
+  } catch (error) {
+    const name = error && typeof error === "object" && "name" in error ? (error as { name?: unknown }).name : "";
+    reportGrokFailure(name === "AbortError" ? "timeout" : "request_failed");
     return null;
   } finally {
     clearTimeout(timer);
@@ -219,11 +259,15 @@ export async function scoreTopSuggestions(
   if (top.length === 0 || !profile) return [];
   const key = cacheKey(userId, locationId, courseId, top);
   const cached = cache.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.rows;
+  if (cached && cached.expiresAt > Date.now()) {
+    const aligned = alignedCache(top, cached.rows);
+    if (aligned) return aligned;
+  }
   const yours = callerFacts(profile, courses);
   const slots = top.map((_, index) => String(index + 1));
   const prompt = grokPrompt(yours, top.map((match, index) => candidateFacts(match, slots[index] ?? "", yours.courses)));
   const text = await requestGrokText(prompt, apiKey, fetchImpl);
+  if (text && !parseGrokBatch(text)) reportGrokFailure("invalid_json");
   const rows = applyGrokText(top, slots, text);
   if (text && rows.some((row) => row.source === "grok")) {
     cache.set(key, { expiresAt: Date.now() + CACHE_MS, rows });

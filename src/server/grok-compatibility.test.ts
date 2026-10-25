@@ -5,6 +5,8 @@ import test from "node:test";
 import type { Course, DiscoveryMatch, Profile } from "#api";
 
 import {
+  GROK_MAX_OUTPUT_TOKENS,
+  GROK_TIMEOUT_MS,
   allowGrokRequest,
   applyGrokText,
   candidateFacts,
@@ -110,14 +112,104 @@ test("the prompt uses public study facts and omits names, emails, and coordinate
   assert.deepEqual(topEligible([match("a"), match("b"), match("c"), match("d"), match("e"), match("f")]).length, 5);
 });
 
-test("output text is read from the Responses API body", () => {
+test("output text is read from the message and reasoning text is ignored", () => {
   assert.equal(readGrokOutputText({ output_text: '{"results":[]}' }), '{"results":[]}');
   assert.equal(
-    readGrokOutputText({ output: [{ content: [{ text: '{"results":[{"slot":"1","score":10,"reasons":["Style"]}]}' }] }] }),
+    readGrokOutputText({
+      output: [
+        { type: "reasoning", content: [{ text: '{"results":[{"slot":"9","score":1,"reasons":["no"]}]}' }] },
+        { type: "message", content: [{ text: '{"results":[{"slot":"1","score":10,"reasons":["Style"]}]}' }] },
+      ],
+    }),
     '{"results":[{"slot":"1","score":10,"reasons":["Style"]}]}',
   );
   const parsed = parseGrokBatch(readGrokOutputText({ output_text: '{"results":[{"slot":"1","score":10,"reasons":["Style"]}]}' }) ?? "");
   assert.equal(parsed?.get("1")?.score, 10);
+});
+
+test("the Responses request uses grok-4.7, low reasoning, and room for five results", async () => {
+  assert.equal(GROK_TIMEOUT_MS, 15_000);
+  assert.ok(GROK_MAX_OUTPUT_TOKENS >= 1000);
+  type GrokRequestBody = {
+    model?: string;
+    store?: boolean;
+    max_output_tokens?: number;
+    reasoning?: { effort?: string };
+  };
+  const captured: { url: string; body: GrokRequestBody | null } = { url: "", body: null };
+  const text = await requestGrokText("anonymous", "test-key", async (input, init) => {
+    captured.url = String(input);
+    captured.body = JSON.parse(String(init?.body)) as GrokRequestBody;
+    return Response.json({ output_text: '{"results":[{"slot":"1","score":70,"reasons":["Style"]}]}', status: "completed" });
+  });
+  assert.equal(captured.url, "https://api.x.ai/v1/responses");
+  assert.equal(captured.body?.model, "grok-4.7");
+  assert.equal(captured.body?.store, false);
+  assert.equal(captured.body?.reasoning?.effort, "low");
+  assert.equal(captured.body?.max_output_tokens, GROK_MAX_OUTPUT_TOKENS);
+  assert.match(text ?? "", /Style/);
+});
+
+test("failure diagnostics name the category and omit secrets", async () => {
+  const logged: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    logged.push(args.map((arg) => String(arg)).join(" "));
+  };
+  try {
+    assert.equal(await requestGrokText("student profile", undefined, async () => {
+      throw new Error("should not be called");
+    }), null);
+    assert.equal(await requestGrokText("student profile", "secret-key", async () => {
+      return Response.json({ leaked: "student profile" }, { status: 401 });
+    }), null);
+    assert.equal(await requestGrokText("student profile", "secret-key", async () => {
+      const error = new Error("aborted");
+      error.name = "AbortError";
+      throw error;
+    }), null);
+    resetGrokState();
+    const rows = await scoreTopSuggestions("user", null, null, profile, [course], [match("student-1")], "secret-key", async () => {
+      return Response.json({ output_text: "not json", status: "completed" });
+    });
+    assert.equal(rows[0]?.source, "matching");
+  } finally {
+    console.error = original;
+  }
+  assert.deepEqual(logged, [
+    "grok compatibility failed: missing_key",
+    "grok compatibility failed: http_error status=401",
+    "grok compatibility failed: timeout",
+    "grok compatibility failed: invalid_json",
+  ]);
+  assert.equal(logged.join("\n").includes("secret-key"), false);
+  assert.equal(logged.join("\n").includes("student profile"), false);
+  assert.equal(logged.join("\n").includes("not json"), false);
+});
+
+test("a changed eligible list does not reuse another student's Grok score", async () => {
+  resetGrokState();
+  let calls = 0;
+  const fetchImpl: typeof fetch = async () => {
+    calls += 1;
+    const score = calls === 1 ? 91 : 44;
+    return Response.json({
+      output_text: `{"results":[{"slot":"1","score":${score},"reasons":["Shared course"]}]}`,
+      status: "completed",
+    });
+  };
+  const first = await scoreTopSuggestions("user", null, null, profile, [course], [match("student-1", 65)], "test-key", fetchImpl);
+  const second = await scoreTopSuggestions("user", null, null, profile, [course], [match("student-2", 40)], "test-key", fetchImpl);
+  const cached = await scoreTopSuggestions("user", null, null, profile, [course], [match("student-2", 40)], "test-key", fetchImpl);
+  assert.equal(first[0]?.userId, "student-1");
+  assert.equal(first[0]?.score, 91);
+  assert.equal(first[0]?.source, "grok");
+  assert.equal(second[0]?.userId, "student-2");
+  assert.equal(second[0]?.score, 44);
+  assert.equal(second[0]?.source, "grok");
+  assert.equal(cached[0]?.score, 44);
+  assert.equal(calls, 2);
+  resetGrokState();
 });
 
 test("a failed Grok request returns no text and the scorer falls back", async () => {
@@ -153,7 +245,12 @@ test("Grok calls are limited per user and the route stays authenticated", () => 
   assert.match(route, /discoverMatches/);
   assert.match(route, /process\.env\.XAI_API_KEY/);
   assert.equal(server.includes("process.env"), false);
-  assert.equal(server.includes("console."), false);
+  assert.match(server, /grok compatibility failed:/);
+  assert.equal(server.includes("console.error(error"), false);
+  assert.equal(server.includes("console.error(prompt"), false);
+  assert.equal(server.includes("console.error(apiKey"), false);
+  assert.equal(server.includes("console.error(text"), false);
+  assert.match(client, /eligibleIds/);
   for (const source of [client, card, browser]) {
     assert.equal(source.includes("XAI_API_KEY"), false);
     assert.equal(source.includes("api.x.ai"), false);

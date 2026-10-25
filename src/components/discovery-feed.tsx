@@ -80,12 +80,13 @@ export function DiscoveryFeed({ embedded = false }: { embedded?: boolean }) {
     const filters: { locationId?: string; courseId?: string } = {};
     if (locationId) filters.locationId = locationId;
     if (courseId) filters.courseId = courseId;
+    const eligibleIds = new Set(matches.slice(0, 5).map((match) => match.user.id));
     void (async () => {
       const result = await getGrokCompatibility(filters);
       if (cancelled || isApiError(result)) return;
       const next: Record<string, GrokCompatibility> = {};
       for (const row of result.data) {
-        if (row.source === "grok") next[row.userId] = row;
+        if (row.source === "grok" && eligibleIds.has(row.userId)) next[row.userId] = row;
       }
       setGrok(next);
     })();
