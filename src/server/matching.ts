@@ -1,3 +1,13 @@
+/**
+ * Canonical TypeScript statement of the contract's Matching v1 rules.
+ *
+ * In production these rules run inside the `discovery_candidates`
+ * database function: scoring there is what allows the authorized
+ * discovery read path to return only public fields (a candidate's
+ * preferred duration, group size, and enrolled courses never leave
+ * Postgres). Keep this module and that function in sync; the tests in
+ * matching.test.ts pin the semantics both must implement.
+ */
 import { LOCATION_RANK_BONUS, MATCH_POINTS, MATCH_REASONS, type Availability, type MatchReason, type StudyStyle } from "#api";
 
 export type MatchCheckin = {

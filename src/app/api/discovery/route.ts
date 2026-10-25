@@ -7,9 +7,9 @@ import { parseDiscoveryQuery } from "@/server/validation";
 
 export async function GET(request: NextRequest) {
   return handleApi(async () => {
-    const { supabase, userId } = await requireAuthenticatedUser();
+    const { supabase } = await requireAuthenticatedUser();
     const query = parseDiscoveryQuery(request.nextUrl.searchParams);
-    const matches = await discoverMatches(supabase, userId, query.locationId, query.courseId);
+    const matches = await discoverMatches(supabase, query.locationId, query.courseId);
     return listResponse(matches, supabase);
   });
 }

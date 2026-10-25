@@ -1,5 +1,8 @@
 -- StudySync MVP schema, RLS, and catalog seed.
 -- Review only. Do not apply to a live database without approval.
+-- This is the single canonical migration for the MVP schema. (Earlier
+-- draft migration files were consolidated into this one before any of
+-- them was applied anywhere; there is no second migration to run.)
 -- One active check-in (checked_out_at is null AND expires_at > server time)
 -- is enforced by an advisory lock inside the check-in transaction.
 -- Do not add a partial index: now() is not immutable, and
@@ -49,14 +52,16 @@ create table public.profiles (
 );
 
 create table public.profile_courses (
-  user_id uuid not null references public.profiles (id) on delete cascade,
+  -- RESTRICT (not CASCADE): deleting a profile must not silently erase
+  -- enrollment, check-in, block, request, or report history (see below).
+  user_id uuid not null references public.profiles (id) on delete restrict,
   course_id uuid not null references public.courses (id) on delete restrict,
   primary key (user_id, course_id)
 );
 
 create table public.checkins (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references public.profiles (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete restrict,
   location_id uuid not null references public.locations (id) on delete restrict,
   course_id uuid not null references public.courses (id) on delete restrict,
   availability text not null check (availability in ('available', 'questions_only', 'focused')),
@@ -80,8 +85,8 @@ create table public.study_requests (
 );
 
 create table public.blocks (
-  blocker_id uuid not null references public.profiles (id) on delete cascade,
-  blocked_id uuid not null references public.profiles (id) on delete cascade,
+  blocker_id uuid not null references public.profiles (id) on delete restrict,
+  blocked_id uuid not null references public.profiles (id) on delete restrict,
   created_at timestamptz not null default now(),
   primary key (blocker_id, blocked_id),
   check (blocker_id <> blocked_id)
@@ -286,17 +291,58 @@ create trigger checkins_enforce_rules before insert or update on public.checkins
 
 create or replace function public.enforce_request_insert_rules()
 returns trigger language plpgsql set search_path = '' as $fn$
+declare
+  sender_university uuid;
+  recipient_university uuid;
+  recipient_visible boolean;
 begin
   if new.status <> 'pending' then
     raise exception 'VALIDATION: a request must be created as pending' using errcode = '23514';
   end if;
-  if exists (
-    select 1 from public.blocks
-    where (blocker_id = new.sender_id and blocked_id = new.recipient_id)
-       or (blocker_id = new.recipient_id and blocked_id = new.sender_id)
-  ) then
+
+  -- Serialize request/block writes for this unordered pair so the block
+  -- and discoverability checks below cannot be raced by a concurrent
+  -- block insert or check-out (blocks take the same lock, see
+  -- enforce_block_insert_rules).
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    pg_catalog.least(new.sender_id, new.recipient_id)::text || ':' ||
+    pg_catalog.greatest(new.sender_id, new.recipient_id)::text, 0));
+
+  -- Recipient discoverability, enforced in the database so a direct
+  -- PostgREST insert cannot bypass it (the send_study_request RPC checks
+  -- the same conditions; this trigger is the defence in depth):
+  -- same university, profile visible, and an active check-in whose
+  -- availability is available/questions_only (never focused).
+  select university_id into sender_university
+  from public.profiles where id = new.sender_id;
+  if sender_university is null then
+    raise exception 'FORBIDDEN: profile is not completed' using errcode = '42501';
+  end if;
+
+  select university_id, visible into recipient_university, recipient_visible
+  from public.profiles where id = new.recipient_id;
+  if recipient_university is null then
+    raise exception 'NOT_FOUND: user not found' using errcode = 'P0002';
+  end if;
+
+  if recipient_university is distinct from sender_university
+     or recipient_visible is not true
+     or not exists (
+       select 1 from public.checkins c
+       where c.user_id = new.recipient_id
+         and c.checked_out_at is null
+         and c.started_at <= pg_catalog.clock_timestamp()
+         and c.expires_at > pg_catalog.clock_timestamp()
+         and c.availability in ('available', 'questions_only')
+     )
+     or exists (
+       select 1 from public.blocks b
+       where (b.blocker_id = new.sender_id and b.blocked_id = new.recipient_id)
+          or (b.blocker_id = new.recipient_id and b.blocked_id = new.sender_id)
+     ) then
     raise exception 'FORBIDDEN: recipient is not discoverable' using errcode = '42501';
   end if;
+
   return new;
 end;
 $fn$;
@@ -355,6 +401,22 @@ $fn$;
 
 create trigger blocks_cancel_pending_requests after insert on public.blocks
   for each row execute function public.cancel_pending_requests_on_block();
+
+-- Blocks take the same per-pair advisory lock as request inserts, so a
+-- request and a block for the same pair cannot interleave: whichever
+-- commits second sees the other's committed state.
+create or replace function public.enforce_block_insert_rules()
+returns trigger language plpgsql set search_path = '' as $fn$
+begin
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    pg_catalog.least(new.blocker_id, new.blocked_id)::text || ':' ||
+    pg_catalog.greatest(new.blocker_id, new.blocked_id)::text, 0));
+  return new;
+end;
+$fn$;
+
+create trigger blocks_enforce_insert_rules before insert on public.blocks
+  for each row execute function public.enforce_block_insert_rules();
 
 alter table public.universities enable row level security;
 alter table public.locations enable row level security;
@@ -520,72 +582,132 @@ create or replace function public.discovery_candidates(p_location_id uuid defaul
 returns jsonb language plpgsql volatile security definer set search_path = public, extensions as $fn$
 declare
   uid uuid := auth.uid();
-  caller_university uuid;
-  caller jsonb;
-  candidates jsonb;
 begin
+  -- Authorized discovery read path. Caller authentication, same-campus
+  -- eligibility, visibility, active check-in, focused exclusion, and
+  -- either-direction blocks are all enforced here, inside the database,
+  -- so a direct RPC call can obtain nothing the API would not return.
+  -- Scoring also happens here (contract Matching v1): the function
+  -- returns only final public DiscoveryMatch fields, never a candidate's
+  -- preferred duration, group size, or enrolled course list.
   if uid is null then
-    return jsonb_build_object('caller', null, 'candidates', '[]'::jsonb);
+    raise exception 'UNAUTHENTICATED: authentication required' using errcode = '28000';
   end if;
-  select university_id into caller_university from public.profiles where id = uid;
-  if caller_university is null then
-    return jsonb_build_object('caller', null, 'candidates', '[]'::jsonb);
-  end if;
-  select jsonb_build_object(
-    'courseIds', coalesce((select array_agg(pc.course_id order by pc.course_id) from public.profile_courses pc where pc.user_id = uid), '{}'::uuid[]),
-    'preferredDurationMinutes', p.preferred_duration_minutes,
-    'preferredGroupSize', p.preferred_group_size,
-    'checkin', (
-      select jsonb_build_object('courseId', c.course_id, 'locationId', c.location_id, 'studyStyle', c.study_style, 'availability', c.availability)
-      from public.checkins c
-      where c.user_id = uid and c.checked_out_at is null and c.expires_at > pg_catalog.clock_timestamp()
-      order by c.started_at desc limit 1
-    )
-  ) into caller from public.profiles p where p.id = uid;
 
-  select coalesce(jsonb_agg(jsonb_build_object(
-    'id', other.id,
-    'displayName', other.display_name,
-    'major', other.major,
-    'academicYear', other.academic_year,
-    'courseIds', coalesce((select array_agg(pc.course_id order by pc.course_id) from public.profile_courses pc where pc.user_id = other.id), '{}'::uuid[]),
-    'preferredDurationMinutes', other.preferred_duration_minutes,
-    'preferredGroupSize', other.preferred_group_size,
-    'availability', ch.availability,
-    'studyStyle', ch.study_style,
-    'locationId', loc.id,
-    'locationName', loc.name,
-    'buildingCode', loc.building_code,
-    'courseId', course.id,
-    'courseUniversityId', course.university_id,
-    'courseCode', course.code,
-    'courseTitle', course.title,
-    'checkinExpiresAt', ch.expires_at,
-    'requestStatus', (
-      select sr.status from public.study_requests sr
-      where (sr.sender_id = uid and sr.recipient_id = other.id) or (sr.sender_id = other.id and sr.recipient_id = uid)
-      order by sr.created_at desc, sr.id desc limit 1
+  return coalesce((
+    with caller_profile as (
+      select * from public.profiles where id = uid
+    ),
+    caller_checkin as (
+      select c.* from public.checkins c
+      where c.user_id = uid and c.checked_out_at is null
+        and c.expires_at > pg_catalog.clock_timestamp()
+      order by c.started_at desc limit 1
+    ),
+    base as (
+      select
+        other.id as user_id,
+        other.display_name,
+        other.major,
+        other.academic_year,
+        ch.availability,
+        ch.study_style as checkin_study_style,
+        ch.expires_at as checkin_expires_at,
+        loc.id as location_id,
+        loc.name as location_name,
+        loc.building_code,
+        course.id as course_id,
+        course.university_id as course_university_id,
+        course.code as course_code,
+        course.title as course_title,
+        (cc.course_id is not null and cc.course_id = ch.course_id) as same_course,
+        exists (
+          select 1 from public.profile_courses mine
+          join public.profile_courses theirs on theirs.course_id = mine.course_id
+          where mine.user_id = uid and theirs.user_id = other.id
+        ) as shared_course,
+        (cc.course_id is not null and (
+          cc.study_style = ch.study_style
+          or cc.study_style = 'flexible'
+          or ch.study_style = 'flexible'
+        )) as style_ok,
+        (cc.location_id is not null and cc.location_id = ch.location_id) as same_location,
+        pg_catalog.abs(cp.preferred_duration_minutes - other.preferred_duration_minutes) as duration_gap,
+        pg_catalog.abs(cp.preferred_group_size - other.preferred_group_size) as group_gap,
+        (
+          select sr.status from public.study_requests sr
+          where (sr.sender_id = uid and sr.recipient_id = other.id)
+             or (sr.sender_id = other.id and sr.recipient_id = uid)
+          order by sr.created_at desc, sr.id desc limit 1
+        ) as request_status
+      from public.profiles other
+      cross join caller_profile cp
+      left join caller_checkin cc on true
+      join lateral (
+        select c.* from public.checkins c
+        where c.user_id = other.id and c.checked_out_at is null
+          and c.started_at <= pg_catalog.clock_timestamp()
+          and c.expires_at > pg_catalog.clock_timestamp()
+        order by c.started_at desc limit 1
+      ) ch on true
+      join public.locations loc on loc.id = ch.location_id and loc.is_active
+      join public.courses course on course.id = ch.course_id
+      where other.university_id = cp.university_id
+        and other.id <> uid
+        and other.visible
+        and ch.availability in ('available', 'questions_only')
+        and (p_location_id is null or ch.location_id = p_location_id)
+        and (p_course_id is null or ch.course_id = p_course_id)
+        and not exists (
+          select 1 from public.blocks b
+          where (b.blocker_id = uid and b.blocked_id = other.id)
+             or (b.blocker_id = other.id and b.blocked_id = uid)
+        )
+    ),
+    scored as (
+      select base.*,
+        (case when same_course then 40 when shared_course then 25 else 0 end
+         + case when style_ok then 20 else 0 end
+         + case when same_location then 20 else 0 end
+         + case when duration_gap <= 30 then 10 when duration_gap <= 60 then 5 else 0 end
+         + case when group_gap <= 1 then 10 else 0 end) as compatibility_score,
+        pg_catalog.array_remove(array[
+          case when same_course then 'Studying the same course'
+               when shared_course then 'Shares another enrolled course' end,
+          case when style_ok then 'Compatible study style' end,
+          case when same_location then 'Same study location' end,
+          case when duration_gap <= 30 then 'Preferred duration within 30 minutes'
+               when duration_gap <= 60 then 'Preferred duration within 60 minutes' end,
+          case when group_gap <= 1 then 'Similar preferred group size' end
+        ], null) as reasons
+      from base
     )
-  )), '[]'::jsonb) into candidates
-  from public.profiles other
-  join lateral (
-    select c.* from public.checkins c
-    where c.user_id = other.id and c.checked_out_at is null and c.expires_at > pg_catalog.clock_timestamp()
-    order by c.started_at desc limit 1
-  ) ch on true
-  join public.locations loc on loc.id = ch.location_id
-  join public.courses course on course.id = ch.course_id
-  where other.university_id = caller_university
-    and other.id <> uid
-    and other.visible
-    and ch.availability in ('available', 'questions_only')
-    and (p_location_id is null or ch.location_id = p_location_id)
-    and (p_course_id is null or ch.course_id = p_course_id)
-    and not exists (
-      select 1 from public.blocks b
-      where (b.blocker_id = uid and b.blocked_id = other.id) or (b.blocker_id = other.id and b.blocked_id = uid)
-    );
-  return jsonb_build_object('caller', caller, 'candidates', candidates);
+    select pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'user', pg_catalog.jsonb_build_object(
+          'id', user_id, 'displayName', display_name, 'major', major,
+          'academicYear', academic_year, 'studyStyle', checkin_study_style
+        ),
+        'location', pg_catalog.jsonb_build_object(
+          'id', location_id, 'name', location_name, 'buildingCode', building_code
+        ),
+        'course', pg_catalog.jsonb_build_object(
+          'id', course_id, 'universityId', course_university_id,
+          'code', course_code, 'title', course_title
+        ),
+        'availability', availability,
+        'compatibilityScore', compatibility_score,
+        'reasons', pg_catalog.to_jsonb(reasons),
+        'checkinExpiresAt', checkin_expires_at,
+        'requestStatus', request_status
+      )
+      order by
+        (compatibility_score + case when same_location then 10 else 0 end) desc,
+        same_location desc,
+        user_id asc
+    )
+    from scored
+  ), '[]'::jsonb);
 end;
 $fn$;
 
@@ -824,6 +946,7 @@ revoke all on function public.enforce_checkin_rules() from public, anon, authent
 revoke all on function public.enforce_request_insert_rules() from public, anon, authenticated;
 revoke all on function public.enforce_request_transition() from public, anon, authenticated;
 revoke all on function public.cancel_pending_requests_on_block() from public, anon, authenticated;
+revoke all on function public.enforce_block_insert_rules() from public, anon, authenticated;
 
 revoke all on function public.save_profile(text, uuid, text, text, uuid[], text, integer, integer, boolean) from public, anon;
 revoke all on function public.current_checkin() from public, anon;
@@ -849,15 +972,9 @@ grant execute on function public.list_my_blocks() to authenticated;
 grant execute on function public.block_user(uuid) to authenticated;
 grant execute on function public.create_report(uuid, text, text) to authenticated;
 
-grant execute on function public.set_updated_at() to authenticated;
-grant execute on function public.enforce_profile_course_rules() to authenticated;
-grant execute on function public.enforce_profile_course_count() to authenticated;
-grant execute on function public.prevent_profile_course_update() to authenticated;
-grant execute on function public.enforce_profile_university_change() to authenticated;
-grant execute on function public.enforce_checkin_rules() to authenticated;
-grant execute on function public.enforce_request_insert_rules() to authenticated;
-grant execute on function public.enforce_request_transition() to authenticated;
-grant execute on function public.cancel_pending_requests_on_block() to authenticated;
+-- Trigger functions are deliberately NOT granted to anyone: PostgreSQL
+-- does not require the table-changing user to hold EXECUTE on a trigger
+-- function, and PostgREST must never be able to invoke them as RPCs.
 
 -- Catalog seed only. No student rows, passwords, or coordinates.
 insert into public.universities (id, name, slug) values
