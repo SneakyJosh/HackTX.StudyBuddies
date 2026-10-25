@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { demoLoginFor } from "@/fixtures/population";
-import { signOutDemo } from "@/fixtures/store";
 import { getRequests, isApiError } from "@/lib/api-client";
+import { labelForEmail, signOut } from "@/lib/session";
 import { useHydratedDemo } from "@/components/demo-provider";
 import { LinkButton } from "@/components/ui";
 
@@ -19,7 +18,7 @@ const TABS = [
 export function AppShell({ children }: { children: ReactNode }) {
   const demo = useHydratedDemo();
 
-  if (!demo.hydrated || !demo.userId) {
+  if (!demo.hydrated || !demo.ready || !demo.userId) {
     return (
       <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col">
         <header className="border-b border-line px-4 py-3">
@@ -27,15 +26,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="text-lg font-semibold">StudySync</p>
         </header>
         <div className="px-4 py-5">
-          {demo.hydrated ? (
+          {demo.hydrated && demo.ready ? (
             <main className="mx-auto grid max-w-lg gap-4">
               <h1 className="text-2xl font-semibold">Sign in required</h1>
               <p className="text-sm leading-6 text-muted">
-                Discover, check-in, requests, and profile stay private until you choose a labeled demo
-                account.
+                Discover, check-in, requests, and profile stay private until you sign in.
               </p>
               <LinkButton href="/" className="self-start">
-                Choose a demo account
+                Sign in
               </LinkButton>
             </main>
           ) : (
@@ -47,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <SignedInShell userId={demo.userId} revision={demo.revision}>
+    <SignedInShell userId={demo.userId} email={demo.email} revision={demo.revision}>
       {children}
     </SignedInShell>
   );
@@ -55,16 +53,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function SignedInShell({
   userId,
+  email,
   revision,
   children,
 }: {
   userId: string;
+  email: string | null;
   revision: number;
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const account = demoLoginFor(userId);
+  const accountLabel = labelForEmail(email) ?? email ?? "Signed in";
   const [pendingCount, setPendingCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -116,16 +116,15 @@ function SignedInShell({
             <p className="text-lg font-semibold leading-tight">StudySync</p>
           </div>
           <div className="text-right">
-            <p className="text-sm font-medium">{account?.label ?? "Demo account"}</p>
+            <p className="text-sm font-medium">{accountLabel}</p>
             <button
               type="button"
               className="text-sm font-semibold text-accent"
               onClick={() => {
-                signOutDemo();
-                router.push("/");
+                void signOut().then(() => router.push("/"));
               }}
             >
-              Switch demo account
+              Sign out
             </button>
           </div>
         </header>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { unstable_rethrow } from "next/navigation";
 import { NextResponse } from "next/server";
 
 import { API_ERROR_STATUS, type ApiErrorCode } from "@/types/api";
@@ -102,6 +103,10 @@ export async function handleApi(handler: () => Promise<NextResponse>): Promise<N
   try {
     return await handler();
   } catch (error) {
+    // cookies() rejects when a prerender finishes. Catching that rejection
+    // turns it into a logged 500. Give it back to Next.js, along with
+    // redirect and notFound control flow.
+    unstable_rethrow(error);
     if (isNextControlFlowError(error)) throw error;
     return apiErrorResponse(error);
   }
