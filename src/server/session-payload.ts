@@ -1,3 +1,4 @@
+import { STUDY_TIME_MINIMUM_MINUTES } from "../lib/study-time.ts";
 import type {
   AcademicYear,
   Course,
@@ -170,7 +171,7 @@ export function parseStudyRecord(value: unknown): StudyRecord {
   const countsTowardStats = asBoolean(row.countsTowardStats);
   if (creditedMinutes < 0 || creditedMinutes > 180) badPayload();
   if (attendance === "missed" && (creditedMinutes !== 0 || countsTowardStats)) badPayload();
-  if (attendance === "completed" && countsTowardStats !== (creditedMinutes >= 30)) badPayload();
+  if (attendance === "completed" && countsTowardStats !== (creditedMinutes >= STUDY_TIME_MINIMUM_MINUTES)) badPayload();
   const campusDate = asString(row.campusDate);
   if (!CAMPUS_DATE.test(campusDate)) badPayload();
   const ratings = asRecord(row.myRatings);

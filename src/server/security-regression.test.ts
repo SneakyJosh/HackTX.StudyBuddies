@@ -273,3 +273,24 @@ test("study history is self-reported, private, and does not change matching", ()
   assert.equal(matching.includes("streak"), false);
   assert.equal(matching.includes("study_session"), false);
 });
+
+test("streak days combine credited minutes without shortening bookings", () => {
+  const applied = readFileSync("supabase/migrations/0005_study_history.sql", "utf8");
+  const next = readFileSync("supabase/migrations/0006_study_time_streak_days.sql", "utf8");
+  const bookings = readFileSync("supabase/migrations/0003_study_sessions.sql", "utf8");
+  assert.match(applied, /credited_minutes >= 30/);
+  assert.match(next, /like '%credited_minutes >= 30%'/);
+  assert.equal(next.includes("credited_minutes >= 30)"), false);
+  assert.match(next, /counts_toward_stats = \(outcome = 'completed' and credited_minutes >= 1\)/);
+  assert.match(next, /credited >= 1/);
+  assert.match(next, /least\(booked_minutes, elapsed_minutes\)/);
+  assert.match(next, /study_day_minutes\(p_user_id, anchor, p_course_id\) < 5/);
+  assert.match(next, /study_day_minutes\(p_user_id, cursor_day, p_course_id\) >= 5/);
+  assert.match(next, /America\/Chicago/);
+  assert.match(next, /if auth\.uid\(\) is distinct from p_user_id then/);
+  assert.equal(next.includes("discovery_candidates"), false);
+  assert.equal(next.includes("checkins"), false);
+  assert.equal(/drop table/i.test(next), false);
+  assert.match(bookings, /ends_at >= starts_at \+ interval '30 minutes'/);
+  assert.match(bookings, /interval '180 minutes'/);
+});

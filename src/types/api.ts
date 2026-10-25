@@ -313,8 +313,9 @@ export type StudyRecord = {
   endsAt: string;
   sessionStatus: SessionStatus;
   attendance: SessionAttendance;
-  /** Minutes this caller claimed. Zero when missed. */
+  /** Minutes recorded at finish. This can be shorter than the 30–180 minute booking. */
   creditedMinutes: number;
+  /** Completed session with at least 1 credited minute. Streak days are a separate daily total. */
   countsTowardStats: boolean;
   /** America/Chicago date of the booking start, `YYYY-MM-DD`. */
   campusDate: string;
@@ -337,11 +338,12 @@ export type StudyCourseStreak = {
 
 export type StudyDayMinutes = { date: string; minutes: number };
 
-/** Totals from qualifying self-reported completions. Never a public ranking. */
+/** Private self-reported totals. Never a public ranking or a match input. */
 export type StudyStats = {
   selfReported: true;
   description: string;
   streakDays: number;
+  /** Sum of credited minutes from finished sessions with at least 1 minute. */
   qualifyingMinutes: number;
   weekMinutes: number;
   week: StudyDayMinutes[];

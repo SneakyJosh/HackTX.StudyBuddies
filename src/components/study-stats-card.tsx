@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getStudyStats, isApiError } from "@/lib/api-client";
+import { STREAK_DAY_MINIMUM_MINUTES, STUDY_TIME_MINIMUM_MINUTES } from "@/lib/study-time";
 import type { StudyStats } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { cardClass } from "@/components/ui";
@@ -52,6 +53,9 @@ export function StudyStatsCard({ variant = "compact" }: { variant?: "compact" | 
   return (
     <div className={variant === "full" ? cardClass : ""}>
       <p className="text-sm leading-6 text-muted">{stats.description}</p>
+      <p className="mt-1 text-sm leading-6 text-muted">
+        A finished session counts toward this total when it has at least {STUDY_TIME_MINIMUM_MINUTES} credited minute. A streak day is {STREAK_DAY_MINIMUM_MINUTES} combined minutes in America/Chicago.
+      </p>
       <dl className="mt-3 grid grid-cols-3 gap-3">
         <div>
           <dt className="text-xs font-bold text-muted">Streak</dt>

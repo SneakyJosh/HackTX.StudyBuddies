@@ -105,7 +105,10 @@ test("a study record keeps hours self-reported and rejects a forged miss", () =>
   assert.equal(parsed.myRatings.environment, 4);
   assert.throws(() => parseStudyRecord({ ...record, selfReported: false }));
   assert.throws(() => parseStudyRecord({ ...record, attendance: "missed", creditedMinutes: 30, countsTowardStats: true }));
-  assert.throws(() => parseStudyRecord({ ...record, creditedMinutes: 10, countsTowardStats: true }));
+  assert.equal(parseStudyRecord({ ...record, creditedMinutes: 1, countsTowardStats: true }).creditedMinutes, 1);
+  assert.equal(parseStudyRecord({ ...record, creditedMinutes: 4, countsTowardStats: true }).creditedMinutes, 4);
+  assert.throws(() => parseStudyRecord({ ...record, creditedMinutes: 0, countsTowardStats: true }));
+  assert.equal(parseStudyRecord({ ...record, creditedMinutes: 0, countsTowardStats: false }).countsTowardStats, false);
 });
 
 test("study stats require seven campus days and a self-reported flag", () => {

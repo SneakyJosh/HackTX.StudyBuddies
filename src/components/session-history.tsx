@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getStudyRecords, isApiError, postStudyRating } from "@/lib/api-client";
 import { formatCampusTimestamp } from "@/lib/campus-time";
+import { STREAK_DAY_MINIMUM_MINUTES, STUDY_TIME_MINIMUM_MINUTES } from "@/lib/study-time";
 import type { PostStudyRatingBody, StudyRecord } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { StudyStatsCard } from "@/components/study-stats-card";
@@ -53,10 +54,8 @@ export function SessionHistory() {
           {history.map((record) => (
             <li key={record.id} className={cardClass}>
               <RecordSummary record={record} />
-              <p className="mt-2 text-sm font-bold">
-                {record.creditedMinutes} min · Self-reported
-                {record.countsTowardStats ? "" : " · Under 30 minutes, so this does not add a streak"}
-              </p>
+              <p className="mt-2 text-sm font-bold">{record.creditedMinutes} min · Self-reported</p>
+              <p className="mt-1 text-sm text-muted">{studyTimeNote(record.creditedMinutes)}</p>
               {record.sessionStatus === "cancelled" ? (
                 <p className="mt-1 text-sm text-muted">You recorded this before the booking was cancelled.</p>
               ) : null}
@@ -90,6 +89,16 @@ export function SessionHistory() {
       <RatingSheet record={rating} onClose={() => setRating(null)} onSaved={setRating} />
     </section>
   );
+}
+
+function studyTimeNote(minutes: number): string {
+  if (minutes < STUDY_TIME_MINIMUM_MINUTES) {
+    return "No credited minutes, so this does not add study time.";
+  }
+  if (minutes < STREAK_DAY_MINIMUM_MINUTES) {
+    return `Counts toward self-reported study time. A streak day needs ${STREAK_DAY_MINIMUM_MINUTES} combined minutes.`;
+  }
+  return "Counts toward self-reported study time and that day's streak total.";
 }
 
 function RecordSummary({ record }: { record: StudyRecord }) {
