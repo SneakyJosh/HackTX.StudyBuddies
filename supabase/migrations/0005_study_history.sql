@@ -57,8 +57,9 @@ create policy "study_session_ratings_select_own" on public.study_session_ratings
   for select to authenticated
   using (rater_id = auth.uid());
 
+-- Authenticated has no table privileges. A direct select would return the stored
+-- roster and rating subjects without the block filter applied by the read functions.
 revoke all on public.study_session_attendance, public.study_session_ratings from public, anon, authenticated;
-grant select on public.study_session_attendance, public.study_session_ratings to authenticated;
 grant all on public.study_session_attendance, public.study_session_ratings to service_role;
 
 create or replace function public.study_record_payload(p_session_id uuid, p_user_id uuid)
@@ -95,8 +96,8 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
     'id', person->>'id',
     'displayName', person->>'displayName',
-    'major', person->'major',
-    'academicYear', person->'academicYear'
+    'major', person->>'major',
+    'academicYear', person->>'academicYear'
   ) order by person->>'displayName', person->>'id'), '[]'::jsonb)
   into people
   from jsonb_array_elements(attendance.roster) person
@@ -372,6 +373,17 @@ begin
       select 1 from public.study_session_attendance a
       where a.session_id = s.id and a.user_id = uid
     )
+    -- A block with the host hides that booking. Past rows are not rewritten by
+    -- the block trigger, so the filter has to run before study_session_payload;
+    -- otherwise one hidden booking fails the whole list.
+    and (
+      s.host_id = uid
+      or not exists (
+        select 1 from public.blocks b
+        where (b.blocker_id = uid and b.blocked_id = s.host_id)
+           or (b.blocker_id = s.host_id and b.blocked_id = uid)
+      )
+    )
     and (
       (p_when = 'upcoming' and s.ends_at > pg_catalog.clock_timestamp() and p.status in ('invited', 'requested', 'accepted'))
       or (p_when = 'past' and s.ends_at <= pg_catalog.clock_timestamp() and (s.host_id = uid or p.status = 'accepted'))
@@ -505,6 +517,9 @@ declare
   cursor_day date;
   streak integer := 0;
 begin
+  if auth.uid() is distinct from p_user_id then
+    raise exception 'NOT_FOUND: session not found' using errcode = 'P0002';
+  end if;
   anchor := today_campus;
   if not exists (
     select 1 from public.study_session_attendance a
