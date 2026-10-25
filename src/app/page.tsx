@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SignInPanel } from "@/components/sign-in-panel";
 
 export const metadata: Metadata = {
-  title: "Demo sign-in",
+  title: "Sign in",
 };
 
 export default function HomePage() {

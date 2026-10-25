@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { demoLoginFor } from "@/fixtures/population";
 import { getCourses, getProfile, getUniversities, isApiError, putProfile } from "@/lib/api-client";
+import { labelForEmail } from "@/lib/session";
 import { ACADEMIC_YEAR_LABELS, ACADEMIC_YEARS, STUDY_STYLE_LABELS, STUDY_STYLES } from "@/lib/labels";
 import {
   VALIDATION,
@@ -81,7 +81,6 @@ export function ProfileForm() {
 
   useEffect(() => {
     if (!demo.hydrated || !demo.userId) return;
-    const userId = demo.userId;
     let cancelled = false;
     void (async () => {
       setPhase("loading");
@@ -101,20 +100,19 @@ export function ProfileForm() {
         setPhase("error");
         return;
       }
-      const account = demoLoginFor(userId);
       setUniversities(universityResult.data);
       setCourses(courseResult.data);
       setForm(
         profileResult.data
           ? formFromProfile(profileResult.data)
-          : emptyForm(universityResult.data[0]?.id ?? "", account?.label ?? ""),
+          : emptyForm(universityResult.data[0]?.id ?? "", labelForEmail(demo.email) ?? ""),
       );
       setPhase("ready");
     })();
     return () => {
       cancelled = true;
     };
-  }, [demo.hydrated, demo.userId, reloadKey]);
+  }, [demo.hydrated, demo.userId, demo.email, reloadKey]);
 
   if (!demo.hydrated || phase === "loading") return <LoadingBlock label="Loading profile" />;
   if (phase === "error") {
@@ -172,7 +170,7 @@ export function ProfileForm() {
     <div className="grid w-full gap-5">
       <PageHeader
         title="Profile"
-        description="Tell StudySync how you like to study. Visibility stays off until you opt in. Demo data in this tab resets if you refresh."
+        description="Tell StudySync how you like to study. Visibility stays off until you opt in. Saving updates your account on this campus."
       />
       <form
         className="grid items-start gap-5 lg:grid-cols-2"
