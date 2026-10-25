@@ -14,6 +14,6 @@ export async function GET(request: NextRequest) {
     const { supabase } = await requireAuthenticatedUser();
     assertNoSearchParams(request.nextUrl.searchParams);
     const universities = await listUniversities(supabase);
-    return listResponse(universities);
+    return listResponse(universities, supabase);
   });
 }

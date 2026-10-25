@@ -1,42 +1,58 @@
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 
-import { internalError } from "./errors";
+const responseHeaders = new WeakMap<SupabaseClient, Record<string, string>>();
 
-/**
- * Server-only Supabase client bound to the caller's session cookie.
- *
- * Uses the publishable/anon key, so every query runs as the signed-in user
- * and Row Level Security applies. The service-role key is never used here.
- * Env values are read lazily so importing this module never throws and no
- * credential is ever sent to the browser (this file is only imported by
- * route handlers under src/app/api).
- */
-export async function createSupabaseServerClient(): Promise<SupabaseClient> {
+function readPublicSupabaseEnv(): { url: string; anonKey: string } {
+  const missing: string[] = [];
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw internalError("Supabase is not configured on the server");
+  if (!url) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+  if (!anonKey) missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (missing.length > 0 || !url || !anonKey) {
+    throw new Error(`Missing environment variable ${missing.join(", ")}`);
   }
+  return { url, anonKey };
+}
 
+/**
+ * Cookie-bound user client. Created inside the function so importing this
+ * module does not connect to Supabase. The service-role key is never read.
+ */
+export async function createSupabaseServerClient(): Promise<SupabaseClient> {
+  const { url, anonKey } = readPublicSupabaseEnv();
   const cookieStore = await cookies();
+  const headers: Record<string, string> = {};
 
-  return createServerClient(url, anonKey, {
+  const supabase = createServerClient(url, anonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet, incomingHeaders) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Called from a Server Component context where cookies are
-          // read-only; the route handler's own response still applies.
+          // Server Components cannot always write cookies. Middleware refreshes them.
         }
+        Object.assign(headers, incomingHeaders);
       },
     },
   });
+
+  responseHeaders.set(supabase, headers);
+  return supabase;
+}
+
+export function copyAuthHeaders(client: SupabaseClient, response: NextResponse): NextResponse {
+  const headers = responseHeaders.get(client);
+  if (!headers) return response;
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value);
+  }
+  return response;
 }

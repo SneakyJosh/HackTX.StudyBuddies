@@ -18,6 +18,6 @@ export async function GET(request: NextRequest) {
     const { supabase, userId } = await requireAuthenticatedUser();
     assertNoSearchParams(request.nextUrl.searchParams);
     const locations = await listLocationsForCaller(supabase, userId);
-    return listResponse(locations);
+    return listResponse(locations, supabase);
   });
 }

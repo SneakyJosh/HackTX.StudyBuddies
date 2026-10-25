@@ -18,6 +18,6 @@ export async function GET(request: NextRequest) {
     const { supabase, userId } = await requireAuthenticatedUser();
     const { q } = parseCourseSearchParams(request.nextUrl.searchParams);
     const courses = await listCoursesForCaller(supabase, userId, q);
-    return listResponse(courses);
+    return listResponse(courses, supabase);
   });
 }
