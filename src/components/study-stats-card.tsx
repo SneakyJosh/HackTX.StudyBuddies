@@ -47,13 +47,6 @@ export function StudyStatsCard({ variant = "compact" }: { variant?: "compact" | 
       </p>
     );
   }
-  if (stats.qualifyingMinutes === 0 && stats.streakDays === 0) {
-    return (
-      <p className="text-sm leading-6 text-muted">
-        No self-reported study time yet. Hours are not estimated, and they are not used for matching.
-      </p>
-    );
-  }
 
   const peak = Math.max(...stats.week.map((day) => day.minutes), 1);
   return (
@@ -62,15 +55,15 @@ export function StudyStatsCard({ variant = "compact" }: { variant?: "compact" | 
       <dl className="mt-3 grid grid-cols-3 gap-3">
         <div>
           <dt className="text-xs font-bold text-muted">Streak</dt>
-          <dd className="font-display text-2xl font-extrabold">{stats.streakDays}</dd>
+          <dd className="font-display text-2xl font-extrabold">{stats.streakDays} days</dd>
         </div>
         <div>
           <dt className="text-xs font-bold text-muted">This week</dt>
-          <dd className="font-display text-2xl font-extrabold">{stats.weekMinutes}</dd>
+          <dd className="font-display text-2xl font-extrabold">{stats.weekMinutes} min</dd>
         </div>
         <div>
-          <dt className="text-xs font-bold text-muted">Total min</dt>
-          <dd className="font-display text-2xl font-extrabold">{stats.qualifyingMinutes}</dd>
+          <dt className="text-xs font-bold text-muted">Total</dt>
+          <dd className="font-display text-2xl font-extrabold">{stats.qualifyingMinutes} min</dd>
         </div>
       </dl>
       {variant === "full" ? (
