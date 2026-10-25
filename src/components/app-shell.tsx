@@ -6,13 +6,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { getRequests, isApiError } from "@/lib/api-client";
 import { labelForEmail, signOut } from "@/lib/session";
 import { useHydratedDemo } from "@/components/demo-provider";
-import { LinkButton } from "@/components/ui";
+import { BrandMark, LinkButton, cx } from "@/components/ui";
 
 const TABS = [
-  { href: "/discover", label: "Discover" },
-  { href: "/check-in", label: "Check-in" },
-  { href: "/requests", label: "Requests" },
-  { href: "/profile", label: "Profile" },
+  { href: "/discover", label: "Discover", icon: DiscoverIcon },
+  { href: "/check-in", label: "Check-in", icon: CheckinIcon },
+  { href: "/requests", label: "Requests", icon: RequestsIcon },
+  { href: "/profile", label: "Profile", icon: ProfileIcon },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -20,25 +20,27 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (!demo.hydrated || !demo.ready || !demo.userId) {
     return (
-      <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col">
-        <header className="border-b border-line px-4 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Demo campus</p>
-          <p className="text-lg font-semibold">StudySync</p>
-        </header>
-        <div className="px-4 py-5">
-          {demo.hydrated && demo.ready ? (
-            <main className="mx-auto grid max-w-lg gap-4">
-              <h1 className="text-2xl font-semibold">Sign in required</h1>
-              <p className="text-sm leading-6 text-muted">
-                Discover, check-in, requests, and profile stay private until you sign in.
-              </p>
-              <LinkButton href="/" className="self-start">
-                Sign in
-              </LinkButton>
-            </main>
-          ) : (
-            children
-          )}
+      <div className="min-h-dvh bg-page">
+        <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col px-5 py-6 lg:px-10">
+          <header className="flex items-center gap-3">
+            <BrandMark size={44} />
+            <p className="font-display text-2xl font-extrabold">StudySync</p>
+          </header>
+          <div className="flex flex-1 items-center justify-center py-8">
+            {demo.hydrated && demo.ready ? (
+              <main className="panel-shadow grid w-full max-w-xl gap-4 rounded-[28px] border border-line bg-background p-6 sm:p-8">
+                <h1 className="font-display text-3xl font-extrabold">Sign in required</h1>
+                <p className="text-[15px] leading-6 text-muted">
+                  Discover, check-in, requests, and profile stay private until you sign in.
+                </p>
+                <LinkButton href="/" className="w-full sm:w-auto">
+                  Sign in
+                </LinkButton>
+              </main>
+            ) : (
+              children
+            )}
+          </div>
         </div>
       </div>
     );
@@ -66,6 +68,7 @@ function SignedInShell({
   const router = useRouter();
   const accountLabel = labelForEmail(email) ?? email ?? "Signed in";
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const currentTab = TABS.find((tab) => tab.href === pathname);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,58 +81,176 @@ function SignedInShell({
     };
   }, [userId, revision]);
 
+  function signOutAndLeave() {
+    void signOut().then(() => router.push("/"));
+  }
+
   return (
-    <div className="flex min-h-dvh w-full flex-col md:flex-row">
-      <nav
-        aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface md:static md:w-52 md:shrink-0 md:border-t-0 md:border-r"
-      >
-        <ul className="grid grid-cols-4 md:flex md:flex-col md:gap-1 md:p-3">
-          {TABS.map((tab) => {
-            const current = pathname === tab.href;
-            return (
-              <li key={tab.href}>
-                <Link
-                  href={tab.href}
-                  aria-current={current ? "page" : undefined}
-                  className={`flex min-h-14 flex-col items-center justify-center gap-1 px-2 text-xs font-semibold md:min-h-11 md:flex-row md:justify-between md:rounded-xl md:px-3 md:text-sm ${
-                    current ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-muted"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  {tab.href === "/requests" && pendingCount !== null && pendingCount > 0 ? (
-                    <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground">
-                      <span className="sr-only">{pendingCount} pending requests</span>
-                      <span aria-hidden="true">{pendingCount}</span>
-                    </span>
-                  ) : null}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-      <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-background px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Demo campus</p>
-            <p className="text-lg font-semibold leading-tight">StudySync</p>
+    <div className="min-h-dvh bg-background lg:bg-page">
+      <div className="lg:grid lg:min-h-dvh lg:grid-cols-[272px_minmax(0,1fr)]">
+        <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface lg:flex">
+          <div className="flex items-center gap-3 px-5 pt-6 pb-5">
+            <BrandMark size={48} />
+            <div>
+              <p className="font-display text-[1.65rem] leading-none font-extrabold">StudySync</p>
+              <p className="mt-1 text-xs font-semibold text-muted">Campus study partners</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-medium">{accountLabel}</p>
-            <button
-              type="button"
-              className="text-sm font-semibold text-accent"
-              onClick={() => {
-                void signOut().then(() => router.push("/"));
-              }}
-            >
+          <nav aria-label="Primary" className="px-3">
+            <ul className="grid gap-1">
+              {TABS.map((tab) => (
+                <li key={tab.href}>
+                  <NavLink
+                    href={tab.href}
+                    label={tab.label}
+                    icon={tab.icon}
+                    current={pathname === tab.href}
+                    pendingCount={tab.href === "/requests" ? pendingCount : null}
+                    layout="sidebar"
+                  />
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <div className="mt-auto border-t border-line px-5 py-4">
+            <p className="truncate text-sm font-bold">{accountLabel}</p>
+            <button type="button" className="mt-1 text-sm font-bold text-accent" onClick={signOutAndLeave}>
               Sign out
             </button>
           </div>
-        </header>
-        <div className="flex-1 px-4 py-5">{children}</div>
+        </aside>
+
+        <div className="flex min-h-dvh min-w-0 flex-col">
+          <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-background/95 px-4 py-3 backdrop-blur-sm lg:px-8">
+            <div className="min-w-0">
+              <p className="font-display text-xl leading-none font-extrabold lg:hidden">StudySync</p>
+              <p className="font-display hidden text-2xl leading-none font-extrabold lg:block">
+                {currentTab?.label ?? "StudySync"}
+              </p>
+              <p className="mt-1 hidden text-sm text-muted lg:block">Public buildings only. No precise location.</p>
+            </div>
+            <div className="text-right lg:hidden">
+              <p className="max-w-40 truncate text-sm font-bold sm:max-w-xs">{accountLabel}</p>
+              <button type="button" className="text-sm font-bold text-accent" onClick={signOutAndLeave}>
+                Sign out
+              </button>
+            </div>
+          </header>
+          <div className="flex-1 px-[18px] pt-5 pb-28 lg:px-8 lg:pt-8 lg:pb-10">
+            <div className="mx-auto w-full max-w-[1180px] xl:max-w-none">{children}</div>
+          </div>
+        </div>
       </div>
+
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface px-1.5 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
+      >
+        <ul className="grid grid-cols-4">
+          {TABS.map((tab) => (
+            <li key={tab.href}>
+              <NavLink
+                href={tab.href}
+                label={tab.label}
+                icon={tab.icon}
+                current={pathname === tab.href}
+                pendingCount={tab.href === "/requests" ? pendingCount : null}
+                layout="tabs"
+              />
+            </li>
+          ))}
+        </ul>
+      </nav>
     </div>
+  );
+}
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  current,
+  pendingCount,
+  layout,
+}: {
+  href: (typeof TABS)[number]["href"];
+  label: string;
+  icon: () => ReactNode;
+  current: boolean;
+  pendingCount: number | null;
+  layout: "tabs" | "sidebar";
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={current ? "page" : undefined}
+      className={cx(
+        "font-semibold text-muted hover:bg-surface-muted",
+        current && "nav-current text-accent",
+        layout === "tabs"
+          ? "flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[12px]"
+          : "flex min-h-11 items-center gap-3 rounded-[14px] px-3 text-sm",
+        layout === "sidebar" && current && "bg-accent-soft hover:bg-accent-soft",
+      )}
+    >
+      <span className="relative">
+        <Icon />
+        {pendingCount !== null && pendingCount > 0 ? (
+          <span className="absolute -top-1.5 -right-2 grid min-h-[18px] min-w-[18px] place-items-center rounded-full bg-danger px-1 text-[11px] font-extrabold text-white">
+            <span className="sr-only">{pendingCount} pending requests</span>
+            <span aria-hidden="true">{pendingCount}</span>
+          </span>
+        ) : null}
+      </span>
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function DiscoverIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="16.5" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M4.5 19c.7-2.6 2.6-4 4.6-4s3.8 1.4 4.5 4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path d="M14.2 15.2c.6-.3 1.3-.4 2-.4 1.7 0 3.1 1 3.6 2.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckinIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="7.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 8.5V12l2.6 1.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function RequestsIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="5" width="16" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 3.8v2.4M16 3.8v2.4M4 9.5h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ProfileIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="8.5" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M6 19c.8-2.8 2.8-4.2 6-4.2s5.2 1.4 6 4.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }

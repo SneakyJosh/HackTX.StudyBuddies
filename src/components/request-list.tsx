@@ -11,6 +11,7 @@ import {
   ErrorBlock,
   LoadingBlock,
   PageHeader,
+  cardClass,
 } from "@/components/ui";
 
 const DIRECTIONS: { value: RequestDirection; label: string }[] = [
@@ -91,19 +92,19 @@ export function RequestList() {
         />
       ) : null}
       {phase === "ready" && requests && requests.length > 0 ? (
-        <ul className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {requests.map((request) => {
             const incoming = demo.userId === request.recipientId;
             const busy = pendingId === request.id;
             const checkedOut = request.course === null || request.location === null;
             return (
-              <li key={request.id} className="rounded-2xl border border-line bg-surface p-4">
+              <li key={request.id} className={cardClass}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {incoming ? "Incoming" : "Outgoing"}
                     </p>
-                    <h2 className="mt-1 text-lg font-semibold">{request.counterpart.displayName}</h2>
+                    <h2 className="mt-1 font-display text-xl font-bold">{request.counterpart.displayName}</h2>
                   </div>
                   <p className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
                     {REQUEST_STATUS_LABELS[request.status]}

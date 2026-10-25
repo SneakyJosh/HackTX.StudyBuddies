@@ -180,13 +180,15 @@ export function CheckinPanel() {
   }
 
   return (
-    <div className="grid w-full gap-5">
+    <div className="grid w-full gap-6">
       <PageHeader
         title="Check-in"
         description="Pick one of your courses, a public building, and how long you plan to stay."
       />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(280px,380px)_minmax(0,1fr)]">
+      <div className="grid content-start gap-5">
       {active ? (
-        <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <section className="panel-shadow flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between xl:flex-col xl:items-stretch">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold">Current check-in</h2>
             <p className="mt-2 text-sm leading-6">
@@ -224,9 +226,10 @@ export function CheckinPanel() {
           start a check-in.
         </div>
       ) : null}
+      </div>
 
       <form
-        className="grid items-start gap-5 lg:grid-cols-2"
+        className="panel-shadow grid items-start gap-5 rounded-[20px] border border-line bg-surface p-4 sm:p-5 lg:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
@@ -350,6 +353,7 @@ export function CheckinPanel() {
         </div>
         </div>
       </form>
+      </div>
     </div>
   );
 }

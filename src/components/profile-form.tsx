@@ -173,7 +173,7 @@ export function ProfileForm() {
         description="Tell StudySync how you like to study. Visibility stays off until you opt in. Saving updates your account on this campus."
       />
       <form
-        className="grid items-start gap-5 lg:grid-cols-2"
+        className="grid items-start gap-5 xl:grid-cols-2"
         autoComplete="off"
         onSubmit={(event) => {
           event.preventDefault();
@@ -181,7 +181,7 @@ export function ProfileForm() {
         }}
       >
         {messages.length > 0 || saved ? (
-          <div className="grid gap-5 lg:col-span-2">
+          <div className="grid gap-5 xl:col-span-2">
             <FieldError messages={messages} />
             {saved ? (
               <p role="status" className="rounded-2xl bg-accent-soft px-4 py-3 text-sm text-accent">
@@ -263,7 +263,7 @@ export function ProfileForm() {
               return (
                 <label
                   key={course.id}
-                  className="flex min-h-11 items-start gap-3 rounded-2xl border border-line bg-surface px-3 py-3"
+                  className="flex min-h-11 items-start gap-3 rounded-[16px] border border-line bg-surface px-3 py-3"
                 >
                   <input
                     type="checkbox"
@@ -321,7 +321,7 @@ export function ProfileForm() {
             {groupSizes.map((size) => (
               <label
                 key={size}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-surface px-3 has-[:checked]:border-accent has-[:checked]:bg-accent has-[:checked]:text-accent-foreground"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-surface-muted px-3 font-bold has-[:checked]:bg-accent-fill has-[:checked]:text-accent-ink"
               >
                 <input
                   type="radio"

@@ -1,27 +1,66 @@
 @import "tailwindcss";
 
+/*
+  StudySync website tokens, adapted from the StudyBuddy reference.
+  Light is the designed appearance. Dark values stay available for a later theme control.
+*/
 :root {
-  --background: #f3efe6;
-  --foreground: #1c1915;
-  --surface: #fffdf8;
-  --surface-muted: #ebe4d6;
-  --accent: #0f5c56;
-  --accent-foreground: #f7fffd;
-  --accent-soft: #d7efe9;
-  --danger: #8f2d2d;
-  --danger-soft: #f8e4e1;
-  --warning: #8a5a12;
-  --warning-soft: #f8ecd4;
-  --line: #e2d9c8;
-  --muted: #5e574c;
+  color-scheme: light;
+  --page: #d9ecfa;
+  --background: #f2f9ff;
+  --foreground: #10304a;
+  --surface: #ffffff;
+  --surface-muted: #e2f1fc;
+  --accent: #b85200;
+  --accent-fill: #ff8a1f;
+  --accent-ink: #2e1600;
+  --accent-foreground: #2e1600;
+  --accent-soft: #ffe8d4;
+  --danger: #d63e55;
+  --danger-soft: #fde8ec;
+  --warning: #b85200;
+  --warning-soft: #fff1e4;
+  --line: #c9e3f5;
+  --muted: #55768f;
+  --good: #1e9e6e;
+  --cool: #2b9be0;
+  --glow: 255, 138, 31;
+  --shadow: 0 10px 40px rgba(20, 80, 130, 0.18);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #07131d;
+  --background: #0e2233;
+  --foreground: #eaf5ff;
+  --surface: #153149;
+  --surface-muted: #1f4361;
+  --accent: #ffa95c;
+  --accent-fill: #ff9a3d;
+  --accent-ink: #2e1600;
+  --accent-foreground: #2e1600;
+  --accent-soft: #3a2a1c;
+  --danger: #ff7f8f;
+  --danger-soft: #3a2430;
+  --warning: #ffa95c;
+  --warning-soft: #3a2a1c;
+  --line: #2d5879;
+  --muted: #9dbbd3;
+  --good: #5bd6a4;
+  --cool: #6cc4f5;
+  --glow: 255, 154, 61;
+  --shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
+  --color-page: var(--page);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
   --color-accent: var(--accent);
+  --color-accent-fill: var(--accent-fill);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
@@ -30,28 +69,81 @@
   --color-warning-soft: var(--warning-soft);
   --color-line: var(--line);
   --color-muted: var(--muted);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #141311;
-    --foreground: #f4efe6;
-    --surface: #1e1c19;
-    --surface-muted: #2a2723;
-    --accent: #7dcec4;
-    --accent-foreground: #10211f;
-    --danger: #f0b4ae;
-    --danger-soft: #3a2422;
-    --warning: #e6c27a;
-    --warning-soft: #3a301c;
-    --line: #3a342c;
-    --muted: #b7ad9e;
-  }
+  --color-good: var(--good);
+  --color-cool: var(--cool);
+  --font-sans: var(--font-manrope), "Avenir Next", "Segoe UI", sans-serif;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), Georgia, "Times New Roman", serif;
+  letter-spacing: -0.01em;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--cool);
+  outline-offset: 2px;
+}
+
+.brand-orb {
+  background: radial-gradient(circle at 35% 30%, #ffebbf, var(--accent-fill) 72%);
+  box-shadow: 0 0 30px 5px rgba(var(--glow), 0.45);
+  animation: studysync-breathe 3.4s ease-in-out infinite;
+}
+
+.panel-shadow {
+  box-shadow: var(--shadow);
+}
+
+.nav-current svg {
+  filter: drop-shadow(0 0 6px rgba(var(--glow), 0.7));
+}
+
+.sheet-panel {
+  animation: studysync-up 0.22s ease-out;
+}
+
+@keyframes studysync-breathe {
+  50% {
+    box-shadow: 0 0 38px 9px rgba(var(--glow), 0.62);
+  }
+}
+
+@keyframes studysync-up {
+  from {
+    transform: translateY(28px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-orb,
+  .sheet-panel {
+    animation: none;
+  }
+
+  .nav-current svg {
+    filter: none;
+  }
 }
