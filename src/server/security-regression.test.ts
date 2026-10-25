@@ -376,3 +376,55 @@ test("studying connections reuse discovery visibility and do not score friends",
   assert.match(matching, /export function scoreMatch/);
   assert.match(readFileSync("src/types/api.ts", "utf8"), /sameActiveCourse: 40/);
 });
+
+test("personal study feedback stays private and does not change minutes or matching", () => {
+  const migration = readFileSync("supabase/migrations/0009_study_feedback.sql", "utf8");
+  const earlier = [
+    "0001_studysync.sql",
+    "0002_fix_pair_lock_least_greatest.sql",
+    "0003_study_sessions.sql",
+    "0004_fix_create_session_column_ambiguity.sql",
+    "0005_study_history.sql",
+    "0006_study_time_streak_days.sql",
+    "0007_checkin_study_records.sql",
+    "0008_studying_connections.sql",
+  ];
+  for (const file of earlier) {
+    assert.equal(readFileSync(`supabase/migrations/${file}`, "utf8").includes("checkin_study_ratings"), false, file);
+  }
+  assert.match(migration, /create table public\.checkin_study_ratings/);
+  assert.match(migration, /category text not null check \(category in \('study_time', 'environment'\)\)/);
+  assert.match(migration, /stars integer not null check \(stars between 1 and 5\)/);
+  assert.match(migration, /primary key \(checkin_id, rater_id, category\)/);
+  assert.match(migration, /references public\.checkin_study_records \(checkin_id\) on delete restrict/);
+  assert.match(migration, /if owner is null or owner is distinct from new\.rater_id then/);
+  assert.match(migration, /if uid is null then/);
+  assert.match(migration, /where checkin_id = p_checkin_id and user_id = uid/);
+  assert.match(migration, /when unique_violation then/);
+  assert.match(migration, /CONFLICT: that rating was already submitted/);
+  assert.match(migration, /revoke all on public\.checkin_study_ratings from public, anon, authenticated;/);
+  assert.match(migration, /grant execute on function public\.submit_checkin_ratings\(uuid, integer, integer\) to authenticated;/);
+  assert.equal(migration.includes("chemistry"), false);
+  assert.equal(migration.includes("update public.profiles"), false);
+  assert.equal(migration.includes("update public.checkin_study_records"), false);
+  assert.equal(migration.includes("study_day_minutes"), false);
+  assert.equal(migration.includes("discovery_candidates"), false);
+  assert.equal(migration.includes("email"), false);
+  assert.equal(/drop table/i.test(migration), false);
+  const matching = readFileSync("src/server/matching.ts", "utf8");
+  assert.equal(matching.includes("checkin_study_ratings"), false);
+  assert.equal(matching.includes("study_session_ratings"), false);
+  const history = readFileSync("src/components/session-history.tsx", "utf8");
+  assert.match(history, /How productive was your study session\?/);
+  assert.match(history, /How much did you enjoy this study space\?/);
+  assert.match(history, /How well did you study with/);
+  const feedback = readFileSync("src/components/study-feedback.tsx", "utf8");
+  assert.match(feedback, /Focus /);
+  assert.match(feedback, /Place /);
+  assert.match(feedback, /Chemistry/);
+  const focus = readFileSync("src/components/focus-sheet.tsx", "utf8");
+  const checkoutStart = focus.indexOf("async function checkoutWithoutSaving");
+  const checkout = focus.slice(checkoutStart, focus.indexOf("return (", checkoutStart));
+  assert.equal(checkout.includes("postCheckinRating"), false);
+  assert.equal(checkout.includes("CheckinFeedback"), false);
+});

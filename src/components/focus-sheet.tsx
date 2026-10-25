@@ -25,6 +25,7 @@ import {
   type StudyStyle,
 } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
+import { CheckinFeedback } from "@/components/study-feedback";
 import { Button, ErrorBlock, FieldError, Sheet, errorLines, fieldClass, inputClass } from "@/components/ui";
 
 type Draft = {
@@ -196,17 +197,27 @@ export function FocusSheet({
         </p>
       ) : null}
       {phase === "ready" && saved ? (
-        <div className="grid gap-4 text-center">
-          <p className="font-display text-2xl font-extrabold">Study session saved</p>
-          <p className="text-sm leading-6">
-            {saved.creditedMinutes} self-reported minute{saved.creditedMinutes === 1 ? "" : "s"}. This time is not independently verified.
-          </p>
-          <p className="text-sm leading-6 text-muted">
-            {saved.creditedMinutes < 1
-              ? "No full minute was completed, so this does not add study time."
-              : "Home, Profile, and History now include this personal study session."}
-          </p>
-          <Button onClick={closeSheet}>Close</Button>
+        <div className="grid gap-4">
+          <div className="grid gap-2 text-center">
+            <p className="font-display text-2xl font-extrabold">Study session saved</p>
+            <p className="text-sm leading-6">
+              {saved.creditedMinutes} self-reported minute{saved.creditedMinutes === 1 ? "" : "s"}. This time is not independently verified.
+            </p>
+            <p className="text-sm leading-6 text-muted">
+              {saved.creditedMinutes < 1
+                ? "No full minute was completed, so this does not add study time."
+                : "Home, Profile, and History now include this personal study session."}
+            </p>
+          </div>
+          <CheckinFeedback
+            key={saved.checkinId}
+            record={saved}
+            onSkip={closeSheet}
+            onSaved={(next) => {
+              savedHold.current = next;
+              setSaved(next);
+            }}
+          />
         </div>
       ) : null}
       {phase === "ready" && profile && active && !saved ? (

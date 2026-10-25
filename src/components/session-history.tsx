@@ -8,6 +8,7 @@ import { STREAK_DAY_MINIMUM_MINUTES, STUDY_TIME_MINIMUM_MINUTES } from "@/lib/st
 import type { CheckinStudyRecord, PostStudyRatingBody, StudyRecord } from "@/types/api";
 import { useDemo } from "@/components/demo-provider";
 import { StudyStatsCard } from "@/components/study-stats-card";
+import { CheckinFeedback, SavedRatingLine, StarPicker } from "@/components/study-feedback";
 import { Button, EmptyBlock, Sheet, cardClass } from "@/components/ui";
 
 export function SessionHistory() {
@@ -18,6 +19,7 @@ export function SessionHistory() {
   const [message, setMessage] = useState<string | null>(null);
   const [checkinMessage, setCheckinMessage] = useState<string | null>(null);
   const [rating, setRating] = useState<StudyRecord | null>(null);
+  const [checkinRating, setCheckinRating] = useState<CheckinStudyRecord | null>(null);
 
   useEffect(() => {
     if (!demo.ready || !demo.userId) return;
@@ -78,7 +80,14 @@ export function SessionHistory() {
                 <p className="mt-1 text-sm text-muted">You recorded this before the booking was cancelled.</p>
               ) : null}
               <People record={card.record} />
-              <Ratings record={card.record} />
+              <SavedRatingLine
+                studyTime={card.record.myRatings.studyTime}
+                environment={card.record.myRatings.environment}
+                chemistry={card.record.myRatings.chemistry.map((item) => ({
+                  label: card.record.participants.find((person) => person.id === item.userId)?.displayName ?? "Student",
+                  stars: item.stars,
+                }))}
+              />
               <Button className="mt-3" variant="secondary" onClick={() => setRating(card.record)}>
                 Rate
               </Button>
@@ -96,6 +105,13 @@ export function SessionHistory() {
               <p className="mt-1 text-sm text-muted">{STUDY_STYLE_LABELS[card.record.studyStyle]}</p>
               <p className="mt-2 text-sm font-bold">{card.record.creditedMinutes} min · Self-reported</p>
               <p className="mt-1 text-sm text-muted">{studyTimeNote(card.record.creditedMinutes)}</p>
+              <SavedRatingLine
+                studyTime={card.record.myRatings.studyTime}
+                environment={card.record.myRatings.environment}
+              />
+              <Button className="mt-3" variant="secondary" onClick={() => setCheckinRating(card.record)}>
+                Rate
+              </Button>
             </li>
             ),
           )}
@@ -120,6 +136,16 @@ export function SessionHistory() {
         </ul>
       )}
       <RatingSheet record={rating} onClose={() => setRating(null)} onSaved={setRating} />
+      <Sheet open={checkinRating !== null} title="Private feedback" onClose={() => setCheckinRating(null)}>
+        {checkinRating ? (
+          <CheckinFeedback
+            key={checkinRating.id}
+            record={checkinRating}
+            onSkip={() => setCheckinRating(null)}
+            onSaved={setCheckinRating}
+          />
+        ) : null}
+      </Sheet>
     </section>
   );
 }
@@ -163,22 +189,6 @@ function People({ record }: { record: StudyRecord }) {
   );
 }
 
-function Ratings({ record }: { record: StudyRecord }) {
-  const { studyTime, environment, chemistry } = record.myRatings;
-  if (studyTime === null && environment === null && chemistry.length === 0) return null;
-  return (
-    <p className="mt-2 text-sm text-muted">
-      Private ratings
-      {studyTime !== null ? ` · Study time ${studyTime}/5` : ""}
-      {environment !== null ? ` · Place ${environment}/5` : ""}
-      {chemistry.map((item) => {
-        const name = record.participants.find((person) => person.id === item.userId)?.displayName ?? "Student";
-        return ` · ${name} ${item.stars}/5`;
-      })}
-    </p>
-  );
-}
-
 export function RatingSheet({
   record,
   onClose,
@@ -189,7 +199,7 @@ export function RatingSheet({
   onSaved?: (record: StudyRecord) => void;
 }) {
   return (
-    <Sheet open={record !== null} title="Private ratings" onClose={onClose}>
+    <Sheet open={record !== null} title="Private feedback" onClose={onClose}>
       {record ? <RatingForm key={record.id} record={record} onClose={onClose} onSaved={onSaved} /> : null}
     </Sheet>
   );
@@ -239,16 +249,16 @@ function RatingForm({
   return (
         <div className="grid gap-4">
           <p className="text-sm leading-6 text-muted">
-            These stay on your account. They do not change compatibility or appear on anyone else&apos;s screen. Skip saves nothing.
+            Answer any question you want. Skip saves nothing and leaves your study time, streak, and completion unchanged. This stays on your account and does not change matching or your saved preferences.
           </p>
-          <StarRow
-            label="Study time"
+          <StarPicker
+            label="How productive was your study session?"
             value={record.myRatings.studyTime ?? studyTime}
             locked={record.myRatings.studyTime !== null}
             onChange={setStudyTime}
           />
-          <StarRow
-            label="Environment"
+          <StarPicker
+            label="How much did you enjoy this study space?"
             value={record.myRatings.environment ?? environment}
             locked={record.myRatings.environment !== null}
             onChange={setEnvironment}
@@ -256,9 +266,9 @@ function RatingForm({
           {record.participants.map((person) => {
             const existing = record.myRatings.chemistry.find((item) => item.userId === person.id)?.stars ?? null;
             return (
-              <StarRow
+              <StarPicker
                 key={person.id}
-                label={`Chemistry with ${person.displayName}`}
+                label={`How well did you study with ${person.displayName}?`}
                 value={existing ?? chemistry[person.id] ?? null}
                 locked={existing !== null}
                 onChange={(stars) => setChemistry((current) => ({ ...current, [person.id]: stars }))}
@@ -272,7 +282,7 @@ function RatingForm({
           ) : null}
           <div className="flex flex-wrap gap-2">
             <Button disabled={busy} onClick={() => void submit()}>
-              Save ratings
+              Save feedback
             </Button>
             <Button variant="secondary" disabled={busy} onClick={onClose}>
               Skip
@@ -282,33 +292,3 @@ function RatingForm({
   );
 }
 
-function StarRow({
-  label,
-  value,
-  locked,
-  onChange,
-}: {
-  label: string;
-  value: number | null;
-  locked: boolean;
-  onChange: (stars: number) => void;
-}) {
-  return (
-    <fieldset className="grid gap-2">
-      <legend className="text-sm font-bold">{label}</legend>
-      <div className="flex flex-wrap gap-2">
-        {[1, 2, 3, 4, 5].map((stars) => (
-          <Button
-            key={stars}
-            variant={value === stars ? "primary" : "secondary"}
-            disabled={locked}
-            aria-pressed={value === stars}
-            onClick={() => onChange(stars)}
-          >
-            {stars}
-          </Button>
-        ))}
-      </div>
-    </fieldset>
-  );
-}

@@ -42,7 +42,7 @@ type Location = { id: string; universityId: string; name: string; buildingCode: 
 type PublicLocation = Pick<Location, 'id' | 'name' | 'buildingCode'>;
 type Course = { id: string; universityId: string; code: string; title: string };
 type Checkin = { id: string; locationId: string; courseId: string; availability: Availability; studyStyle: StudyStyle; startedAt: string; expiresAt: string; live: boolean };
-type CheckinStudyRecord = { id: string; checkinId: string; course: Course; location: PublicLocation; studyStyle: StudyStyle; availability: Availability; startedAt: string; finishedAt: string; creditedMinutes: number; countsTowardStats: boolean; campusDate: string; recordedAt: string; selfReported: true };
+type CheckinStudyRecord = { id: string; checkinId: string; course: Course; location: PublicLocation; studyStyle: StudyStyle; availability: Availability; startedAt: string; finishedAt: string; creditedMinutes: number; countsTowardStats: boolean; campusDate: string; recordedAt: string; selfReported: true; myRatings: { studyTime: number | null; environment: number | null } };
 type DiscoveryUser = { id: string; displayName: string; major: string | null; academicYear: AcademicYear | null; studyStyle: StudyStyle };
 type DiscoveryMatch = { user: DiscoveryUser; location: PublicLocation; course: Course; availability: Availability; compatibilityScore: number; reasons: MatchReason[]; checkinExpiresAt: string; requestStatus: RequestStatus | null };
 type StudyingConnection = { user: DiscoveryUser; location: PublicLocation; course: Course; availability: 'available' | 'questions_only' };
@@ -90,6 +90,7 @@ Check-in `courseId` must be one of the caller's `courseIds`. Check-in `locationI
 | POST | `/api/checkin` | yes | Create or replace the current user's check-in |
 | DELETE | `/api/checkin` | yes | Check out without saving study time |
 | POST | `/api/checkin/:id/finish` | yes | Save a personal study record and check out |
+| POST | `/api/checkin/:id/ratings` | yes | Store this caller's private personal-session feedback. `201` |
 | GET | `/api/checkin/history` | yes | The caller's finished personal study sessions |
 | GET | `/api/discovery` | yes | Discover same-campus active matches |
 | GET | `/api/connections/studying` | yes | Accepted study partners who are currently discoverable |
@@ -140,7 +141,7 @@ Response `200 { "data": { "checkedOut": true } }`. This is check-out without a s
 No body. The server computes credited minutes from `started_at` through `min(now, expires_at)`. A full minute is required for study-time credit. Minutes after `expires_at` are not credited. The planned check-in length stays 30–180 minutes. Finishing checks the caller out and stores one personal study record. A second finish of the same check-in returns that record and does not add minutes. Checkout or replace before finish is `409`. Finish after `expires_at + 2 hours` is `409` and writes nothing. Another student's check-in is `404`. The response is one `CheckinStudyRecord` with `selfReported: true`.
 
 ### GET `/api/checkin/history`
-Returns `{ "data": CheckinStudyRecord[], "meta": { "count": number } }`, newest start first. These records are private to the caller. They do not include other students or ratings.
+Returns `{ "data": CheckinStudyRecord[], "meta": { "count": number } }`, newest start first. These records are private to the caller. They do not include other students. `myRatings.studyTime` is the saved answer to “How productive was your study session?” and `myRatings.environment` is “How much did you enjoy this study space?”. Either value is null until that question is saved. There is no chemistry field, because a personal check-in has no verified partner.
 
 ### GET `/api/discovery?locationId=uuid&courseId=uuid`
 Both filters are optional. Response `{ "data": DiscoveryMatch[], "meta": { "count": number } }`.
@@ -374,7 +375,9 @@ A history participant list is the accepted roster copied at record time, without
 The study day is the `America/Chicago` date of the booking `startsAt` or the check-in `startedAt`. A session that crosses midnight keeps every credited minute on the start date. Total study time adds every completed booking and every finished personal check-in with at least 1 credited minute. A streak day is a campus date whose completed bookings and finished check-ins add up to at least 5 credited minutes. Sessions of 1–4 minutes count toward the total and toward that day's combined total. They do not qualify the day on their own unless the day's combined total reaches 5. The streak counts back from today, or from yesterday when today is under 5 minutes. A gap before that anchor makes the streak 0. Week bars are Monday through Sunday in `America/Chicago` and include every credited minute, including days under 5. Course streaks use the same daily total for one course. Missed rows, unconfirmed bookings, cancelled bookings with no prior completion, and check-ins that were closed without Finish studying contribute nothing.
 
 ### Ratings
-`POST /api/sessions/:id/ratings` is allowed only after that caller's attendance is `completed`. Categories are `study_time`, `environment`, and `chemistry`. Study time and environment have no subject. Chemistry names one other accepted participant from the stored roster, never the author, and never a student blocked at submit time. Stars are integers 1–5. One row exists per rater, session, category, and subject. A duplicate is `409`. Ratings are returned only on the author's own history record. Nobody else can read them.
+`POST /api/sessions/:id/ratings` is allowed only after that caller's attendance is `completed`. Categories are `study_time`, `environment`, and `chemistry`. `studyTime` answers “How productive was your study session?”. `environment` answers “How much did you enjoy this study space?”. Study time and environment have no subject. `chemistry` answers “How well did you study with this person?” and names one other accepted participant from the stored roster, never the author, and never a student blocked at submit time. Stars are integers 1–5. One row exists per rater, session, category, and subject. A duplicate is `409`. A body may include one category and omit the others. Ratings are returned only on the author's own history record. Nobody else can read them. Skip and dismiss write nothing and do not change credited minutes, streaks, or completion. A saved star does not change profile preferences or the compatibility score.
+
+`POST /api/checkin/:id/ratings` uses the same two session questions for a finished personal check-in. The body is `{ "studyTime"?: 1-5, "environment"?: 1-5 }` with at least one field. `chemistry` is rejected. The caller must own that `checkin_study_records` row. A missing record, another student's check-in, a checkout with no saved record, and a booking id are `404`. A repeated category is `409` and does not overwrite the original stars. The response is that caller's `CheckinStudyRecord`.
 
 ### Endpoints
 | Method | Path | Description |
@@ -382,6 +385,7 @@ The study day is the `America/Chicago` date of the booking `startsAt` or the che
 | POST | `/api/sessions/:id/finish` | Record this caller's completion. `200` |
 | POST | `/api/sessions/:id/miss` | Record this caller's miss. `200` |
 | POST | `/api/sessions/:id/ratings` | Store this caller's private ratings. `201` |
+| POST | `/api/checkin/:id/ratings` | Store this caller's private personal-session feedback. `201` |
 | GET | `/api/study-stats` | This caller's self-reported streak and minutes |
 
 Finish and miss return one `StudyRecord`. Ratings body is `{ "studyTime"?: 1-5, "environment"?: 1-5, "chemistry"?: [{ "userId", "stars" }] }` with at least one field. `GET /api/study-stats` returns `{ selfReported: true, description, streakDays, qualifyingMinutes, weekMinutes, week: [{ date, minutes }], courseStreaks }`.

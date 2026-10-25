@@ -377,6 +377,16 @@ export type CheckinStudyRecord = {
   campusDate: string;
   recordedAt: string;
   selfReported: true;
+  /** Private to the caller. Null until that question is saved. */
+  myRatings: {
+    studyTime: number | null;
+    environment: number | null;
+  };
+};
+
+export type PostCheckinRatingBody = {
+  studyTime?: number;
+  environment?: number;
 };
 
 export type PostStudyRatingBody = {

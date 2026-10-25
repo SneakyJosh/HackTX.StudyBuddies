@@ -102,6 +102,24 @@ export function parseCheckinStudyRecord(value: unknown): CheckinStudyRecord {
     campusDate,
     recordedAt: asIsoTimestamp(row.recordedAt),
     selfReported: true,
+    myRatings: asCheckinRatings(row.myRatings),
+  };
+}
+
+function asStars(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const stars = asInteger(value);
+  if (stars < 1 || stars > 5) badPayload();
+  return stars;
+}
+
+function asCheckinRatings(value: unknown): { studyTime: number | null; environment: number | null } {
+  if (value === undefined) return { studyTime: null, environment: null };
+  const row = asRecord(value);
+  if ("chemistry" in row) badPayload();
+  return {
+    studyTime: asStars(row.studyTime),
+    environment: asStars(row.environment),
   };
 }
 

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Checkin, CheckinStudyRecord, PostCheckinBody } from "@/types/api";
+import type { Checkin, CheckinStudyRecord, PostCheckinBody, PostCheckinRatingBody } from "@/types/api";
 
 import { parseCheckin, parseCheckinStudyRecord, parseCheckinStudyRecords } from "./checkin-payload";
 import { forbiddenError, throwMappedDbError, validationError } from "./errors";
@@ -66,4 +66,18 @@ export async function listCheckinStudyRecords(supabase: SupabaseClient): Promise
   const { data, error } = await supabase.rpc("list_checkin_study_records");
   if (error) throwMappedDbError(error);
   return parseCheckinStudyRecords(data);
+}
+
+export async function rateCheckin(
+  supabase: SupabaseClient,
+  checkinId: string,
+  body: PostCheckinRatingBody,
+): Promise<CheckinStudyRecord> {
+  const { data, error } = await supabase.rpc("submit_checkin_ratings", {
+    p_checkin_id: checkinId,
+    p_study_time: body.studyTime ?? null,
+    p_environment: body.environment ?? null,
+  });
+  if (error) throwMappedDbError(error);
+  return parseCheckinStudyRecord(data);
 }

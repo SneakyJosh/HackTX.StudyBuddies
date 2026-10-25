@@ -45,3 +45,20 @@ test("a personal study record accepts one credited minute and rejects a mismatch
   assert.throws(() => parseCheckinStudyRecord({ ...record, creditedMinutes: 0, countsTowardStats: true }));
   assert.throws(() => parseCheckinStudyRecord({ ...record, selfReported: false }));
 });
+
+test("personal feedback keeps the caller's stars and rejects a partner score", () => {
+  const parsed = parseCheckinStudyRecord({
+    ...record,
+    email: "alex@studysync.example",
+    myRatings: { studyTime: 4, environment: null, latitude: 30.2 },
+  });
+  const serialized = JSON.stringify(parsed);
+  assert.equal(parsed.myRatings.studyTime, 4);
+  assert.equal(parsed.myRatings.environment, null);
+  assert.equal(serialized.includes("email"), false);
+  assert.equal(serialized.includes("latitude"), false);
+  assert.equal(serialized.includes("chemistry"), false);
+  assert.equal(parseCheckinStudyRecord(record).myRatings.studyTime, null);
+  assert.throws(() => parseCheckinStudyRecord({ ...record, myRatings: { studyTime: 4, environment: null, chemistry: [] } }));
+  assert.throws(() => parseCheckinStudyRecord({ ...record, myRatings: { studyTime: 6, environment: null } }));
+});

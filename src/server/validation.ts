@@ -11,6 +11,7 @@ import {
   type PostReportBody,
   type PostRequestBody,
   type PostSessionBody,
+  type PostCheckinRatingBody,
   type PostStudyRatingBody,
   type PutProfileBody,
   type ReportReason,
@@ -527,6 +528,28 @@ export function parsePostReportBody(body: Record<string, unknown>, callerId: str
     reportedUserId: reportedUserId as string,
     reason: reason as ReportReason,
     details: reportDetails,
+  };
+}
+
+export function parsePostCheckinRatingBody(body: Record<string, unknown>): PostCheckinRatingBody {
+  const details = unknownFields(body, ["studyTime", "environment"]);
+  let studyTime: number | undefined;
+  let environment: number | undefined;
+  if (Object.prototype.hasOwnProperty.call(body, "studyTime")) {
+    const stars = parseInteger(body.studyTime, "studyTime", 1, 5, details);
+    if (stars !== null) studyTime = stars;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "environment")) {
+    const stars = parseInteger(body.environment, "environment", 1, 5, details);
+    if (stars !== null) environment = stars;
+  }
+  if (studyTime === undefined && environment === undefined && Object.keys(details).length === 0) {
+    details.studyTime = "Add at least one rating";
+  }
+  fail(details);
+  return {
+    ...(studyTime === undefined ? {} : { studyTime }),
+    ...(environment === undefined ? {} : { environment }),
   };
 }
 
