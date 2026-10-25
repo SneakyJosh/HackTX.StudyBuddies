@@ -79,7 +79,7 @@ function SignedInShell({
   }, [userId, revision]);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col md:flex-row">
+    <div className="flex min-h-dvh w-full flex-col md:flex-row">
       <nav
         aria-label="Primary"
         className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface md:static md:w-52 md:shrink-0 md:border-t-0 md:border-r"

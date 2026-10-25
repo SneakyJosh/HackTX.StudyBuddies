@@ -81,12 +81,12 @@ export function DiscoveryFeed() {
   const filtered = locationId !== "" || courseId !== "";
 
   return (
-    <div className="mx-auto grid w-full max-w-5xl gap-5">
+    <div className="grid w-full gap-5">
       <PageHeader
         title="Discover"
         description="Active students on your campus who opted in. The percentage is the compatibility score. Same-building order does not change that number. A score of 0 has no explanation chips."
       />
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:max-w-3xl">
         <label className={fieldClass} htmlFor="discovery-building">
           Building
           <select
@@ -143,7 +143,7 @@ export function DiscoveryFeed() {
           <p className="text-sm text-muted">
             {count} {count === 1 ? "student" : "students"}
           </p>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             {matches.map((match) => (
               <ProfileCard
                 key={match.user.id}

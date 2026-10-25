@@ -28,12 +28,11 @@ export function ProfileCard({
           <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-muted">Compatibility</span>
         </p>
       </div>
-      <p className="mt-4 inline-flex w-fit rounded-full bg-accent-soft px-3 py-1 text-sm font-semibold text-accent">
-        {course.code}
-        <span className="sr-only"> </span>
-        <span className="ml-2 font-medium">{course.title}</span>
+      <p className="mt-4 inline-flex max-w-full flex-wrap items-baseline gap-x-2 gap-y-1 rounded-full bg-accent-soft px-3 py-1 text-sm font-semibold text-accent">
+        <span>{course.code}</span>
+        <span className="font-medium">{course.title}</span>
       </p>
-      <p className="mt-3 text-sm leading-6">{location.name}</p>
+      <p className="mt-3 text-sm leading-6 break-words">{location.name}</p>
       <p className="text-sm text-muted">{location.buildingCode}</p>
       <p className="mt-2 text-sm">
         {AVAILABILITY_LABELS[availability]} · {STUDY_STYLE_LABELS[user.studyStyle]} check-in

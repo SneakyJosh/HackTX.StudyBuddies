@@ -169,26 +169,31 @@ export function ProfileForm() {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-2xl gap-5">
+    <div className="grid w-full gap-5">
       <PageHeader
         title="Profile"
         description="Tell StudySync how you like to study. Visibility stays off until you opt in. Demo data in this tab resets if you refresh."
       />
       <form
-        className="grid gap-5"
+        className="grid items-start gap-5 lg:grid-cols-2"
         autoComplete="off"
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
-        <FieldError messages={messages} />
-        {saved ? (
-          <p role="status" className="rounded-2xl bg-accent-soft px-4 py-3 text-sm text-accent">
-            {saved}
-          </p>
+        {messages.length > 0 || saved ? (
+          <div className="grid gap-5 lg:col-span-2">
+            <FieldError messages={messages} />
+            {saved ? (
+              <p role="status" className="rounded-2xl bg-accent-soft px-4 py-3 text-sm text-accent">
+                {saved}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
+        <div className="grid gap-5">
         <label className={fieldClass} htmlFor={`${formId}-name`}>
           Display name
           <input
@@ -254,7 +259,7 @@ export function ProfileForm() {
           <p className="text-sm text-muted">
             Choose {VALIDATION.courseIds.min}–{VALIDATION.courseIds.max} seeded courses.
           </p>
-          <div className="grid gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             {courses.map((course) => {
               const checked = form.courseIds.includes(course.id);
               return (
@@ -277,7 +282,9 @@ export function ProfileForm() {
             })}
           </div>
         </fieldset>
+        </div>
 
+        <div className="grid content-start gap-5">
         <fieldset className="grid gap-2">
           <legend className="text-sm font-medium">Study style</legend>
           {STUDY_STYLES.map((style) => (
@@ -298,6 +305,7 @@ export function ProfileForm() {
           Preferred duration, {form.preferredDurationMinutes} minutes
           <input
             id={`${formId}-duration`}
+            className="w-full"
             type="range"
             min={VALIDATION.preferredDurationMinutes.min}
             max={VALIDATION.preferredDurationMinutes.max}
@@ -349,6 +357,7 @@ export function ProfileForm() {
         <Button type="submit" disabled={saving} className="w-full sm:w-auto">
           {saving ? "Saving…" : "Save profile"}
         </Button>
+        </div>
       </form>
     </div>
   );

@@ -59,7 +59,7 @@ export function RequestList() {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-2xl gap-5">
+    <div className="grid w-full gap-5">
       <PageHeader
         title="Requests"
         description="Accept, decline, or cancel from here. A missing course or building means that student is checked out."
@@ -91,21 +91,21 @@ export function RequestList() {
         />
       ) : null}
       {phase === "ready" && requests && requests.length > 0 ? (
-        <ul className="grid gap-4">
+        <ul className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {requests.map((request) => {
             const incoming = demo.userId === request.recipientId;
             const busy = pendingId === request.id;
             const checkedOut = request.course === null || request.location === null;
             return (
               <li key={request.id} className="rounded-2xl border border-line bg-surface p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted">
                       {incoming ? "Incoming" : "Outgoing"}
                     </p>
                     <h2 className="mt-1 text-lg font-semibold">{request.counterpart.displayName}</h2>
                   </div>
-                  <p className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
+                  <p className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
                     {REQUEST_STATUS_LABELS[request.status]}
                   </p>
                 </div>

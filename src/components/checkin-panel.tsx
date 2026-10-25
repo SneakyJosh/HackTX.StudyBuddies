@@ -121,7 +121,7 @@ export function CheckinPanel() {
   }
   if (!profile || !draft) {
     return (
-      <div className="mx-auto grid w-full max-w-2xl gap-5">
+      <div className="grid w-full max-w-3xl gap-5">
         <PageHeader
           title="Check-in"
           description="Check in at a public campus building for a limited time."
@@ -180,30 +180,37 @@ export function CheckinPanel() {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-2xl gap-5">
+    <div className="grid w-full gap-5">
       <PageHeader
         title="Check-in"
         description="Pick one of your courses, a public building, and how long you plan to stay."
       />
       {active ? (
-        <section className="rounded-2xl border border-line bg-surface p-4">
-          <h2 className="text-lg font-semibold">Current check-in</h2>
-          <p className="mt-2 text-sm leading-6">
-            {activeCourse ? `${activeCourse.code} · ${activeCourse.title}` : "Course"}
-          </p>
-          <p className="text-sm leading-6">
-            {activeLocation ? `${activeLocation.name} (${activeLocation.buildingCode})` : "Building"}
-          </p>
-          <p className="text-sm leading-6 text-muted">
-            {AVAILABILITY_LABELS[active.availability]} · {STUDY_STYLE_LABELS[active.studyStyle]} · until{" "}
-            {formatTimestamp(active.expiresAt)}
-          </p>
-          {active.availability === "focused" ? (
-            <p className="mt-2 text-sm leading-6 text-warning">
-              Focused hides the student from discovery.
+        <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold">Current check-in</h2>
+            <p className="mt-2 text-sm leading-6">
+              {activeCourse ? `${activeCourse.code} · ${activeCourse.title}` : "Course"}
             </p>
-          ) : null}
-          <Button variant="danger" className="mt-4" disabled={checkingOut} onClick={() => void checkout()}>
+            <p className="text-sm leading-6 break-words">
+              {activeLocation ? `${activeLocation.name} (${activeLocation.buildingCode})` : "Building"}
+            </p>
+            <p className="text-sm leading-6 text-muted">
+              {AVAILABILITY_LABELS[active.availability]} · {STUDY_STYLE_LABELS[active.studyStyle]} · until{" "}
+              {formatTimestamp(active.expiresAt)}
+            </p>
+            {active.availability === "focused" ? (
+              <p className="mt-2 text-sm leading-6 text-warning">
+                Focused hides the student from discovery.
+              </p>
+            ) : null}
+          </div>
+          <Button
+            variant="danger"
+            className="shrink-0"
+            disabled={checkingOut}
+            onClick={() => void checkout()}
+          >
             {checkingOut ? "Checking out…" : "Check out"}
           </Button>
         </section>
@@ -219,19 +226,24 @@ export function CheckinPanel() {
       ) : null}
 
       <form
-        className="grid gap-5"
+        className="grid items-start gap-5 lg:grid-cols-2"
         onSubmit={(event) => {
           event.preventDefault();
           void submit();
         }}
       >
-        <FieldError messages={messages} />
-        {notice ? (
-          <p role="status" className="rounded-2xl bg-accent-soft px-4 py-3 text-sm text-accent">
-            {notice}
-          </p>
+        {messages.length > 0 || notice ? (
+          <div className="grid gap-5 lg:col-span-2">
+            <FieldError messages={messages} />
+            {notice ? (
+              <p role="status" className="rounded-2xl bg-accent-soft px-4 py-3 text-sm text-accent">
+                {notice}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
+        <div className="grid gap-5">
         <label className={fieldClass} htmlFor={`${formId}-course`}>
           Course
           <select
@@ -277,6 +289,7 @@ export function CheckinPanel() {
           Duration, {draft.durationMinutes} minutes
           <input
             id={`${formId}-duration`}
+            className="w-full"
             type="range"
             min={VALIDATION.durationMinutes.min}
             max={VALIDATION.durationMinutes.max}
@@ -285,7 +298,9 @@ export function CheckinPanel() {
             onChange={(event) => setDraft({ ...draft, durationMinutes: Number(event.target.value) })}
           />
         </label>
+        </div>
 
+        <div className="grid content-start gap-5">
         <fieldset className="grid gap-2" aria-describedby={`${formId}-focused`}>
           <legend className="text-sm font-medium">Availability</legend>
           {AVAILABILITIES.map((availability) => (
@@ -332,6 +347,7 @@ export function CheckinPanel() {
           <LinkButton href="/discover" variant="secondary">
             See matches
           </LinkButton>
+        </div>
         </div>
       </form>
     </div>
